@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(python -c \"import openpyxl; print\\(openpyxl.__version__\\)\")",
+      "PowerShell(Stop-Process -Id 4460,22824,27592 -Force -Confirm:$false -ErrorAction SilentlyContinue)",
+      "PowerShell(\"cleaned up\")",
+      "PowerShell(cd D:\\\\SDAAREA; python -m py_compile \"pages\\\\1_Sync_dan_Transpose.py\"; echo \"EXIT: $LASTEXITCODE\")",
+      "PowerShell(cd D:\\\\SDAAREA; python -m py_compile render_outlet_image.py; echo \"COMPILE EXIT: $LASTEXITCODE\")",
+      "PowerShell(cd D:\\\\SDAAREA; python -m py_compile \"omset_pipeline\\\\transpose.py\"; echo \"EXIT: $LASTEXITCODE\")",
+      "PowerShell(Remove-Item \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--SDAAREA\\\\54ca06e8-76ea-40b7-84e0-0ca44e506bad\\\\scratchpad\\\\verify_transpose.py\" -ErrorAction SilentlyContinue)",
+      "PowerShell(\"cleaned\")",
+      "PowerShell(winget --version)",
+      "PowerShell(winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements)",
+      "PowerShell(git config --global user.name)",
+      "PowerShell(git config --global user.email)"
+    ]
+  }
+}
