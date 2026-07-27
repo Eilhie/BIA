@@ -12,7 +12,30 @@
       "PowerShell(winget --version)",
       "PowerShell(winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements)",
       "PowerShell(git config --global user.name)",
-      "PowerShell(git config --global user.email)"
+      "PowerShell(git config --global user.email)",
+      "PowerShell(python \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--SDAAREA\\\\54ca06e8-76ea-40b7-84e0-0ca44e506bad\\\\scratchpad\\\\inspect2.py\" \"D:\\\\OUTLET MCLUB PLATINUM GOLD\\\\kirim\\\\List Outlet G P Mc Umum-kirim.xlsx\")",
+      "PowerShell(python \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--SDAAREA\\\\54ca06e8-76ea-40b7-84e0-0ca44e506bad\\\\scratchpad\\\\inspect2.py\" \"D:\\\\OUTLET MCLUB PLATINUM GOLD\\\\kirim\\\\List Outlet G P Mc Horeka-kirim.xlsx\")",
+      "PowerShell(python \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--SDAAREA\\\\54ca06e8-76ea-40b7-84e0-0ca44e506bad\\\\scratchpad\\\\inspect2.py\" \"D:\\\\OUTLET MCLUB PLATINUM GOLD\\\\List Outlet G P Mc Horeka.xlsx\")",
+      "PowerShell(python \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--SDAAREA\\\\54ca06e8-76ea-40b7-84e0-0ca44e506bad\\\\scratchpad\\\\inspect2.py\" \"D:\\\\OUTLET MCLUB PLATINUM GOLD\\\\List Outlet G P Mc Umum.xlsx\")",
+      "Skill(fewer-permission-prompts)",
+      "Skill(fewer-permission-prompts:*)",
+      "PowerShell(python \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--SDAAREA\\\\54ca06e8-76ea-40b7-84e0-0ca44e506bad\\\\scratchpad\\\\dump.py\" \"D:\\\\OUTLET MCLUB PLATINUM GOLD\\\\kirim\\\\List Outlet G P Mc Horeka-kirim.xlsx\" LIST GROUP)",
+      "Bash(python3 -c ' *)",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(Start-Sleep -Seconds *)",
+      "PowerShell(python -m py_compile *)",
+      "PowerShell(Write-Host *)",
+      "PowerShell(Test-Path *)",
+      "PowerShell(Get-CimInstance *)",
+      "PowerShell(Get-Content *)",
+      "Bash(mkdir -p \"D:\\\\SDAAREA\\\\mclub_pipeline\")",
+      "PowerShell(cd D:\\\\SDAAREA; python -m py_compile mclub_pipeline.py; echo \"EXIT: $LASTEXITCODE\")",
+      "PowerShell(cd D:\\\\SDAAREA; python -m py_compile \"pages\\\\5_Outlet_Lapisan_MClub.py\"; echo \"EXIT: $LASTEXITCODE\")",
+      "PowerShell(cd D:\\\\SDAAREA; python -m py_compile mclub_pipeline.py \"pages\\\\5_Outlet_Lapisan_MClub.py\"; echo \"COMPILE: $LASTEXITCODE\"; python \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--SDAAREA\\\\54ca06e8-76ea-40b7-84e0-0ca44e506bad\\\\scratchpad\\\\test_mclub_horeka.py\")",
+      "PowerShell(cd D:\\\\SDAAREA; python -m py_compile omset_search_app.py; echo \"EXIT: $LASTEXITCODE\")"
+    ],
+    "additionalDirectories": [
+      "D:\\SDAAREA"
     ]
   }
 }

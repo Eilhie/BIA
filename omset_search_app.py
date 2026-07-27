@@ -184,12 +184,14 @@ if "last_query" in st.session_state:
                     f"""
                 <style>
                   .action-btn {{
-                    padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer;
+                    display: inline-block; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer;
                     border-radius: 0.5rem; border: 1px solid #999; margin-right: 0.5rem;
+                    color: inherit; text-decoration: none; background: #f0f2f6;
+                    font-family: inherit;
                   }}
                 </style>
                 <button class="action-btn" onclick="copyReportImage()">Copy to Clipboard</button>
-                <button class="action-btn" onclick="printReport()">Print</button>
+                <a id="print-link" class="action-btn" href="#" target="_blank" rel="noopener noreferrer">Print</a>
                 <span id="action-status" style="margin-left:0.5rem;"></span>
                 <script>
                 const reportImgSrc = "data:image/png;base64,{b64}";
@@ -207,31 +209,19 @@ if "last_query" in st.session_state:
                     }}
                 }}
 
-                function printReport() {{
-                    // Print dibuka di TAB TERPISAH -- sengaja, supaya kalau print dialog
-                    // bermasalah/nge-hang, itu cuma tab itu sendiri yang kena, app utama
-                    // tetap responsif. Sebelumnya window.print() dipanggil langsung di
-                    // halaman ini (dalam iframe) tanpa try/catch, dan itu yang bikin app
-                    // freeze kalau print-nya error.
-                    const status = document.getElementById('action-status');
-                    try {{
-                        const win = window.open('', '_blank');
-                        if (!win) {{
-                            status.textContent = 'Gagal buka tab print -- cek popup blocker browser.';
-                            return;
-                        }}
-                        win.document.write(
-                            '<html><head><title>Print Laporan</title></head>' +
-                            '<body style="margin:0;">' +
-                            '<img src="' + reportImgSrc + '" style="width:100%;" onload="window.print()">' +
-                            '</body></html>'
-                        );
-                        win.document.close();
-                        status.textContent = '';
-                    }} catch (e) {{
-                        status.textContent = 'Print gagal: ' + e.message;
-                    }}
-                }}
+                // Print pakai <a target="_blank"> ke Blob URL, BUKAN window.open() --
+                // window.open() dipanggil dari dalam iframe components.html() diblokir
+                // popup-blocker browser (terbukti: user selalu dapat pesan "Gagal buka tab
+                // print"). Navigasi <a> asli tidak kena heuristik popup-blocker yang sama,
+                // jadi jauh lebih bisa diandalkan dari konteks iframe. href-nya (Blob URL)
+                // disiapkan di sini, SEBELUM diklik, supaya klik-nya murni navigasi native.
+                const printHtml =
+                    '<html><head><title>Print Laporan</title></head>' +
+                    '<body style="margin:0;">' +
+                    '<img src="' + reportImgSrc + '" style="width:100%;" onload="window.print()">' +
+                    '</body></html>';
+                const printBlob = new Blob([printHtml], {{type: 'text/html'}});
+                document.getElementById('print-link').href = URL.createObjectURL(printBlob);
                 </script>
                 """,
                     height=50,
