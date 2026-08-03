@@ -14,7 +14,7 @@ import streamlit.components.v1 as components
 
 import pandas as pd
 
-from omset_seeker import build_outlet_index, load_brand, load_gabungan_map
+from omset_seeker import build_outlet_index, get_cutoff_date, load_brand, load_gabungan_map
 from render_outlet_image import (
     C_CELL_BRAND,
     C_CELL_RT2_25,
@@ -38,9 +38,17 @@ st.title("OMSET Seeker")
 MAX_LIST_RESULTS = 30
 
 
-def build_html_table(row_cells: list) -> str:
+def build_html_table(row_cells: list, cutoffs: dict[str, str] | None = None) -> str:
     """Tabel HTML yang meniru layout & warna OMSET OUTLET Excel/PNG asli:
-    2025 (peach) + RT2 25 (merah) | BRAND (biru muda) | 2026 (putih) + RT2 26 (biru tua)."""
+    2025 (peach) + RT2 25 (merah) | BRAND (biru muda) | CUT OFF (opsional) |
+    2026 (putih) + RT2 26 (biru tua).
+
+    Kolom CUT OFF cuma tampil di tabel web ini (lewat parameter `cutoffs`),
+    SENGAJA tidak disentuh di render_outlet_image.py sama sekali -- PNG yang
+    dipakai Print/Copy/Excel jadi otomatis TIDAK ikut nampilkan kolom ini tanpa
+    perlu CSS/logic khusus "sembunyikan saat print", karena keduanya memang
+    jalur render yang benar-benar terpisah."""
+    show_cutoff = cutoffs is not None
     th = lambda text, bg, fg="black": (
         f'<th style="background:{bg};color:{fg};padding:4px 8px;white-space:nowrap;'
         f'border:1px solid #999;">{text}</th>'
@@ -49,6 +57,8 @@ def build_html_table(row_cells: list) -> str:
     header += "".join(th(c, C_HEADER_25) for c in LABELS_25)
     header += th("RT2 25", C_HEADER_RT2_25, "white")
     header += th("BRAND", C_HEADER_BRAND)
+    if show_cutoff:
+        header += th("CUT OFF", C_HEADER_BRAND)
     header += "".join(th(c, C_HEADER_26) for c in LABELS_26)
     header += th("RT2 26", C_HEADER_RT2_26, "white")
     header += "</tr>"
@@ -65,6 +75,8 @@ def build_html_table(row_cells: list) -> str:
         row += "".join(td(v, bg) for v in vals_25)
         row += td(rt2_25, bg if row_type != "normal" else C_CELL_RT2_25, bold=True)
         row += td(label, bg if row_type != "normal" else C_CELL_BRAND, align="left", bold=True)
+        if show_cutoff:
+            row += td(cutoffs.get(label, "") or "-", bg, align="center")
         row += "".join(td(v, bg) for v in vals_26)
         row += td(rt2_26, bg if row_type != "normal" else C_CELL_RT2_26, bold=True)
         row += "</tr>"
@@ -215,10 +227,28 @@ if "last_query" in st.session_state:
                 // print"). Navigasi <a> asli tidak kena heuristik popup-blocker yang sama,
                 // jadi jauh lebih bisa diandalkan dari konteks iframe. href-nya (Blob URL)
                 // disiapkan di sini, SEBELUM diklik, supaya klik-nya murni navigasi native.
+                // Laporan itu satu gambar PNG utuh (bukan tabel HTML), jadi browser
+                // TIDAK bisa memberi jeda halaman yang pas di batas baris -- kalau cuma
+                // width:100%, gambar yang lebih tinggi dari 1 halaman kepotong PAS DI
+                // TENGAH tabel waktu print. Percobaan pertama (skala pakai px hasil
+                // tebakan JS) TERBUKTI masih meleset -- asumsi px/inch beda-beda per
+                // browser/printer. Diganti pakai satuan FISIK (mm) yang diikat langsung
+                // ke ukuran kertas @page -- ini yang dijamin konsisten oleh browser
+                // untuk konteks print, tidak bergantung tebakan DPI sama sekali.
+                // object-fit:contain di dalam kotak 287mm x 200mm (A4 landscape - margin
+                // 5mm tiap sisi) MEMAKSA gambar (berapa pun ukuran piksel aslinya) untuk
+                // selalu muat pas di satu halaman, tidak pernah lebih besar dari itu.
                 const printHtml =
-                    '<html><head><title>Print Laporan</title></head>' +
-                    '<body style="margin:0;">' +
-                    '<img src="' + reportImgSrc + '" style="width:100%;" onload="window.print()">' +
+                    '<html><head><title>Print Laporan</title>' +
+                    '<style>' +
+                    '@page {{ size: landscape; margin: 5mm; }}' +
+                    'html, body {{ margin:0; padding:0; height:100%; }}' +
+                    '.print-page {{ width:287mm; height:200mm; display:flex; align-items:center; justify-content:center; }}' +
+                    '.print-page img {{ max-width:100%; max-height:100%; object-fit:contain; }}' +
+                    '</style>' +
+                    '</head>' +
+                    '<body>' +
+                    '<div class="print-page"><img src="' + reportImgSrc + '" onload="window.print()"></div>' +
                     '</body></html>';
                 const printBlob = new Blob([printHtml], {{type: 'text/html'}});
                 document.getElementById('print-link').href = URL.createObjectURL(printBlob);
@@ -229,7 +259,15 @@ if "last_query" in st.session_state:
             except Exception as e:
                 st.warning(f"Copy/Print tidak tersedia: {e}")
 
-        st.markdown(build_html_table(row_cells), unsafe_allow_html=True)
+        # Cutoff PER BRAND (bukan cuma satu tanggal untuk seluruh outlet) --
+        # dibutuhkan karena brand yang beda bisa punya tanggal sync terakhir
+        # yang beda juga (lihat pages/6_Cek_Cutoff_OMSHAR.py). get_cutoff_date()
+        # di-cache lru_cache jadi baris brand yang sama tidak baca file berkali-kali.
+        brand_cutoffs = {
+            label: get_cutoff_date(brand=label, omshar_type=q_type)
+            for label in {row[2] for row in row_cells}
+        }
+        st.markdown(build_html_table(row_cells, cutoffs=brand_cutoffs), unsafe_allow_html=True)
 
         gabungan_info = load_gabungan_map().get(q_site)
         if gabungan_info:

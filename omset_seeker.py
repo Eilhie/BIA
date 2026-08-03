@@ -107,8 +107,15 @@ def _read_query_csv(path: Path) -> pd.DataFrame:
     return df
 
 
+@lru_cache(maxsize=None)
 def get_cutoff_parts(brand: str = VALIDATION_BRAND, omshar_type: str = "UMUM", sheet: str | None = None):
-    """Ambil (day, month, year) cut off dari baris 'PERIODE : JAN sd DD/MM/YYYY', atau None kalau gagal parse."""
+    """Ambil (day, month, year) cut off dari baris 'PERIODE : JAN sd DD/MM/YYYY', atau None kalau gagal parse.
+
+    Di-cache karena sekarang dipanggil PER BRAND (bukan cuma sekali per outlet
+    pakai VALIDATION_BRAND) buat kolom Cut Off per baris di tabel web -- tanpa
+    cache, satu pencarian outlet bisa baca ~20-29 file CSV kecil berulang kali.
+    Sama seperti load_brand()/load_gabungan_map(), HARUS di-cache_clear() setelah
+    Transpose supaya tidak diam-diam nyangkut di cutoff lama."""
     sheet = sheet or ("DAPUL" if omshar_type == "UMUM" else "HOREKA")
     full_path = _csv_path(omshar_type, brand, sheet).with_name(
         _csv_path(omshar_type, brand, sheet).name.replace("_query", "")

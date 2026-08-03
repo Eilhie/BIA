@@ -263,9 +263,6 @@ def render_outlet_report(
     # ── Header text (site code, outlet, cutoff) ──
     cx = total_w / 2
     y = top_y + header_text_h * 0.5
-    box_w, box_h = 3.4, header_text_h * 0.7
-    ax.add_patch(Rectangle((cx - box_w / 2, y - box_h / 2), box_w, box_h,
-                            facecolor="white", edgecolor="black", linewidth=1.2))
     ax.text(cx, y, info["Site"], ha="center", va="center", fontsize=13, fontweight="bold")
 
     y += header_text_h
