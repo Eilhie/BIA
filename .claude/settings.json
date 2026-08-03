@@ -32,7 +32,13 @@
       "PowerShell(cd D:\\\\SDAAREA; python -m py_compile mclub_pipeline.py; echo \"EXIT: $LASTEXITCODE\")",
       "PowerShell(cd D:\\\\SDAAREA; python -m py_compile \"pages\\\\5_Outlet_Lapisan_MClub.py\"; echo \"EXIT: $LASTEXITCODE\")",
       "PowerShell(cd D:\\\\SDAAREA; python -m py_compile mclub_pipeline.py \"pages\\\\5_Outlet_Lapisan_MClub.py\"; echo \"COMPILE: $LASTEXITCODE\"; python \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--SDAAREA\\\\54ca06e8-76ea-40b7-84e0-0ca44e506bad\\\\scratchpad\\\\test_mclub_horeka.py\")",
-      "PowerShell(cd D:\\\\SDAAREA; python -m py_compile omset_search_app.py; echo \"EXIT: $LASTEXITCODE\")"
+      "PowerShell(cd D:\\\\SDAAREA; python -m py_compile omset_search_app.py; echo \"EXIT: $LASTEXITCODE\")",
+      "Bash(python \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--SDAAREA\\\\54ca06e8-76ea-40b7-84e0-0ca44e506bad\\\\scratchpad\\\\test_print_html.py\")",
+      "PowerShell(cd D:\\\\SDAAREA; python -m py_compile render_outlet_image.py; echo \"EXIT: $LASTEXITCODE\")",
+      "Bash(python -c ' *)",
+      "PowerShell(cd D:\\\\SDAAREA; python -m py_compile \"pages\\\\6_Cek_Cutoff_OMSHAR.py\"; echo \"EXIT: $LASTEXITCODE\")",
+      "Bash(python \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--SDAAREA\\\\54ca06e8-76ea-40b7-84e0-0ca44e506bad\\\\scratchpad\\\\test_cutoff.py\")",
+      "PowerShell(cd D:\\\\SDAAREA; python -m py_compile omset_seeker.py omset_search_app.py \"pages\\\\1_Sync_dan_Transpose.py\"; echo \"EXIT: $LASTEXITCODE\")"
     ],
     "additionalDirectories": [
       "D:\\SDAAREA"
