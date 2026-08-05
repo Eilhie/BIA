@@ -27,6 +27,40 @@ METRIC_LABELS = {
     "PCT_BIR_VS_MUSUH": "% BIR vs Musuh", "PCT_BIR_VS_INDUSTRI": "% BIR vs Industri",
 }
 
+# Kolom rasio (0.0-1.0-an) yang di file kerja Excel-nya diformat cell sebagai '0%'
+# (bilangan bulat, tanpa desimal) -- dicek langsung pakai openpyxl di KEDUA channel
+# (UMUM & HOREKA), bukan tebakan, dan ternyata sama persis di keduanya.
+PCT_COLS = ["PCT_SMT1_VS_SMT2", "PCT_SMT1_VS_RT25", "PCT_BIR_VS_MUSUH", "PCT_BIR_VS_INDUSTRI"]
+
+# Kolom angka (KRT) -- file kerja aslinya pakai format akuntansi 1 desimal
+# (`#,##0.0`), tapi user minta 2 desimal di sini secara eksplisit.
+NUM_COLS = ["RT2_25", "SMT2_25", "SMT1_26", "OMS_LOSS", "TOTAL_MUSUH", "INDUSTRI"]
+
+
+def _fmt_num(v) -> str:
+    if pd.isna(v):
+        return "-"
+    return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _pct_tier_css(v) -> str:
+    """Skema warna PERSIS sama dengan conditional formatting asli di file Excel
+    kerja-nya -- dicek langsung lewat dxf styles openpyxl (bukan tebakan), dan
+    identik di ketiga pasangan kolom % (SMT1 vs SMT2/RT25, BIR vs Musuh/Industri)
+    di KEDUA channel: <=0% polos (theme putih di file asli), 0-100% hijau,
+    100-115% kuning, 115-130% oranye, 130-150% merah, >=150% ungu."""
+    if pd.isna(v) or v <= 0:
+        return ""
+    if v <= 1:
+        return "background-color: #00FF00; color: #000; font-weight: bold;"
+    if v <= 1.15:
+        return "background-color: #FFFF00; color: #000; font-weight: bold;"
+    if v <= 1.3:
+        return "background-color: #FFC000; color: #000; font-weight: bold;"
+    if v <= 1.5:
+        return "background-color: #FF0000; color: #fff; font-weight: bold;"
+    return "background-color: #6600CC; color: #fff;"
+
 category = st.radio("Kategori", ["UMUM", "HOREKA"], horizontal=True, key="mclub_cat")
 
 st.divider()
@@ -121,8 +155,42 @@ else:
     display_cols = [c for c in base_cols + list(METRIC_LABELS.keys()) if c in view.columns]
 
     st.caption(f"{len(view)} outlet ditemukan (dari {len(result)} total).")
-    shown = view[display_cols].rename(columns=METRIC_LABELS)
-    st.dataframe(shown, use_container_width=True, hide_index=True)
+    shown = view[display_cols].copy()
+
+    # Simpan nilai % MENTAH (sebelum diformat jadi string) dulu, dikunci ke label
+    # SETELAH rename -- dipakai nanti buat conditional formatting warnanya, karena
+    # begitu jadi string "55%" nilai aslinya sudah tidak bisa dipakai untuk
+    # menentukan tier warna.
+    raw_pct = {METRIC_LABELS[col]: shown[col] for col in PCT_COLS if col in shown.columns}
+
+    # Format persen SAMA PERSIS seperti format cell di file kerja Excel-nya:
+    # cek langsung (openpyxl, number_format cell) di kedua channel (UMUM & HOREKA)
+    # -- keduanya pakai '0%' (bilangan bulat, tanpa desimal), bukan tebakan.
+    for col in PCT_COLS:
+        if col in shown.columns:
+            shown[col] = shown[col].apply(lambda v: f"{v * 100:.0f}%" if pd.notna(v) else "-")
+
+    # Angka KRT dibulatkan 2 desimal, format Indonesia (koma sbg desimal).
+    for col in NUM_COLS:
+        if col in shown.columns:
+            shown[col] = shown[col].apply(_fmt_num)
+
+    shown = shown.rename(columns=METRIC_LABELS)
+
+    def _style_pct_col(col_series):
+        raw = raw_pct.get(col_series.name)
+        if raw is None:
+            return [""] * len(col_series)
+        return [_pct_tier_css(raw.loc[idx]) for idx in col_series.index]
+
+    try:
+        st.dataframe(
+            shown.style.apply(_style_pct_col, subset=list(raw_pct.keys()), axis=0),
+            use_container_width=True, hide_index=True,
+        )
+    except Exception:
+        # fallback kalau styling tidak didukung versi Streamlit ini
+        st.dataframe(shown, use_container_width=True, hide_index=True)
 
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
