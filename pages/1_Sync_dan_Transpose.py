@@ -21,6 +21,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+import auth
 import omset_seeker
 import sku_lookup
 
@@ -49,6 +50,7 @@ def _fmt_duration(seconds: float) -> str:
     return f"{s}d"
 
 st.set_page_config(page_title="Sync & Transpose", layout="wide")
+auth.require_level(5, page="Sync dan Transpose")
 st.title("Sync & Transpose OMSHAR")
 
 

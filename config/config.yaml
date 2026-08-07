@@ -1,0 +1,27 @@
+# config.yaml
+# Definisi level akses (0-5) dan level minimum tiap halaman/entry point.
+# Dibaca oleh auth.py -- ubah di sini kalau mau geser suatu halaman ke level
+# lain, tidak perlu edit kode.
+
+levels:
+  0: "Nonaktif"
+  1: "Viewer"
+  2: "Analyst"
+  3: "Analyst Senior"
+  4: "Supervisor SKU"
+  5: "Admin"
+
+# Halaman baca-saja (laporan/pencarian) -- level 1-2.
+# Halaman yang bisa UBAH data terpilih (SKU_LIST, jalankan Sync/Transpose,
+# kelola user) -- level 4-5.
+pages:
+  "omset_search_app.py": 1          # Omset Seeker (entry point utama)
+  "pages/0_Dashboard.py": 1
+  "pages/2_SKU_Manifest.py": 2
+  "pages/3_Cek_Klaim_SKU.py": 3
+  "pages/5_Outlet_Lapisan_MClub.py": 2
+  "pages/6_Cek_Cutoff_OMSHAR.py": 2
+  "pages/7_Detail_SKU_Brand_Besar.py": 2
+  "pages/4_Atur_SKU_Sync.py": 4     # edit file SKU_LIST yang kontrol Sync
+  "pages/1_Sync_dan_Transpose.py": 5  # jalankan pipeline penuh, tulis ke DB produksi
+  "pages/8_Kelola_User.py": 5         # kelola akun & lihat audit log

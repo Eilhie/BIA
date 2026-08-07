@@ -45,7 +45,7 @@ D:\SDAAREA\
 
 Python 3.x dengan library berikut:
 ```
-pip install xlrd openpyxl pandas matplotlib
+pip install xlrd openpyxl pandas matplotlib streamlit bcrypt pyyaml
 ```
 
 Akses jaringan ke `\\10.4.1.25\Bev\OMSHAR`

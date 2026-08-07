@@ -15,10 +15,13 @@ from pathlib import Path
 
 import streamlit as st
 
+import auth
+
 sys.path.insert(0, str(Path(r"D:\SDAAREA\omset_pipeline")))
 import transpose as t  # noqa: E402
 
 st.set_page_config(page_title="Atur SKU Sync", layout="wide")
+auth.require_level(4, page="Atur SKU Sync")
 st.title("Atur SKU Sync")
 st.caption(
     "Kelola daftar SKU yang ditarik dari server pas Sync. Tiap grup di bawah = 1 file "

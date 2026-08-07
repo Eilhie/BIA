@@ -36,6 +36,5 @@ Thumbs.db
 .DS_Store
 DB/auth/*.db
 DB/backup/*.db
-config/config.yaml
 __pycache__/
 *.pyc
