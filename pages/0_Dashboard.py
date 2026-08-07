@@ -11,12 +11,15 @@ from pathlib import Path
 
 import streamlit as st
 
+import auth
+
 sys.path.insert(0, str(Path(r"D:\SDAAREA\omset_pipeline")))
 import transpose as t  # noqa: E402
 
 from omset_seeker import find_latest_toko_gabungan, get_cutoff_date, load_gabungan_map  # noqa: E402
 
 st.set_page_config(page_title="Dashboard", layout="wide")
+auth.require_level(1, page="Dashboard")
 st.title("Dashboard")
 
 DB_DIR = Path(r"D:\DB OMSHAR\DB")

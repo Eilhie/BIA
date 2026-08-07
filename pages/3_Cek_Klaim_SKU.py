@@ -11,10 +11,12 @@ from io import BytesIO
 import pandas as pd
 import streamlit as st
 
+import auth
 import omset_seeker
 import sku_lookup
 
 st.set_page_config(page_title="Cek Klaim SKU", layout="wide")
+auth.require_level(3, page="Cek Klaim SKU")
 st.title("Cek Klaim SKU")
 st.caption(
     "QTY (KRT) per varian SKU individu, per outlet, trend Jan-Des 2026 -- dibaca "

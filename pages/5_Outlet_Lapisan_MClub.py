@@ -10,9 +10,11 @@ import io
 import pandas as pd
 import streamlit as st
 
+import auth
 import mclub_pipeline as mp
 
 st.set_page_config(page_title="Outlet Lapisan (MClub)", layout="wide")
+auth.require_level(2, page="Outlet Lapisan (MClub)")
 st.title("Outlet Lapisan (MClub)")
 st.caption(
     "Klasifikasi tier outlet (Gold/Platinum/MCLUB) + analisis kompetitif, dihitung "

@@ -14,6 +14,7 @@ import streamlit.components.v1 as components
 
 import pandas as pd
 
+import auth
 from omset_seeker import build_outlet_index, get_cutoff_date, load_brand, load_gabungan_map
 from render_outlet_image import (
     C_CELL_BRAND,
@@ -33,6 +34,7 @@ from render_outlet_image import (
 )
 
 st.set_page_config(page_title="OMSET Seeker", layout="wide")
+auth.require_level(1, page="Omset Seeker")
 st.title("OMSET Seeker")
 
 MAX_LIST_RESULTS = 30
@@ -208,17 +210,68 @@ if "last_query" in st.session_state:
                 <script>
                 const reportImgSrc = "data:image/png;base64,{b64}";
 
+                // navigator.clipboard.write() CUMA jalan di "secure context" (https://
+                // atau http://localhost) -- browser MEMBLOKIR total di akses LAN biasa
+                // (http://<IP-lokal>:8501, persis mode CARI OUTLET (LAN).bat), bukan
+                // soal browser tidak mendukung. Makanya kalau itu gagal/tidak ada,
+                // fallback ke document.execCommand('copy') yang lebih tua -- API itu
+                // TIDAK terikat aturan secure-context jadi masih bisa jalan di LAN,
+                // dengan trik: taruh gambarnya di elemen contenteditable tersembunyi,
+                // select elemennya, baru panggil execCommand('copy').
                 async function copyReportImage() {{
                     const status = document.getElementById('action-status');
                     status.textContent = 'Menyalin...';
                     try {{
                         const resp = await fetch(reportImgSrc);
                         const blob = await resp.blob();
+                        if (!(window.isSecureContext && navigator.clipboard && navigator.clipboard.write)) {{
+                            throw new Error('clipboard-api-unavailable');
+                        }}
                         await navigator.clipboard.write([new ClipboardItem({{'image/png': blob}})]);
                         status.textContent = 'Tersalin!';
+                        return;
                     }} catch (e) {{
-                        status.textContent = 'Gagal copy (browser tidak mendukung) -- coba Chrome/Edge.';
+                        // lanjut ke fallback di bawah
                     }}
+
+                    try {{
+                        const ok = await copyImageLegacyFallback();
+                        status.textContent = ok ? 'Tersalin!' : 'Gagal copy -- coba Print atau Download Excel.';
+                    }} catch (e2) {{
+                        status.textContent = window.isSecureContext
+                            ? 'Gagal copy (browser tidak mendukung) -- coba Chrome/Edge, atau pakai Print/Download Excel.'
+                            : 'Copy to Clipboard diblokir browser di akses LAN (http tanpa HTTPS) -- pakai Print atau Download Excel sebagai gantinya.';
+                    }}
+                }}
+
+                function copyImageLegacyFallback() {{
+                    return new Promise((resolve, reject) => {{
+                        const container = document.createElement('div');
+                        container.contentEditable = 'true';
+                        container.style.position = 'fixed';
+                        container.style.left = '-9999px';
+                        const img = document.createElement('img');
+                        img.onload = () => {{
+                            document.body.appendChild(container);
+                            container.appendChild(img);
+                            const range = document.createRange();
+                            range.selectNode(img);
+                            const sel = window.getSelection();
+                            sel.removeAllRanges();
+                            sel.addRange(range);
+                            let ok = false;
+                            try {{
+                                ok = document.execCommand('copy');
+                            }} catch (e3) {{
+                                ok = false;
+                            }}
+                            sel.removeAllRanges();
+                            document.body.removeChild(container);
+                            resolve(ok);
+                        }};
+                        img.onerror = () => reject(new Error('image-load-failed'));
+                        img.src = reportImgSrc;
+                    }});
                 }}
 
                 // Print pakai <a target="_blank"> ke Blob URL, BUKAN window.open() --
@@ -256,6 +309,24 @@ if "last_query" in st.session_state:
                 """,
                     height=50,
                 )
+
+                # Tombol "Copy to Clipboard" di atas pakai navigator.clipboard.write(),
+                # yang browser TOTAL blokir di luar secure context (https:// atau
+                # http://localhost) -- termasuk fallback execCommand('copy') ternyata
+                # TIDAK cukup diandalkan untuk gambar di browser modern (terbukti:
+                # masih gagal di akses LAN meski sudah ada fallback itu). Klik-kanan
+                # native browser TIDAK tunduk pada aturan secure-context sama sekali
+                # (itu aksi UI browser, bukan panggilan API dari script halaman), jadi
+                # ini satu-satunya cara yang DIJAMIN selalu berhasil apa pun originnya.
+                with st.popover("Salin Gambar (cara pasti berhasil di LAN)"):
+                    st.caption(
+                        "Tombol 'Copy to Clipboard' di atas bisa gagal kalau diakses lewat "
+                        "jaringan kantor (LAN) -- itu batasan keamanan browser, bukan bug. "
+                        "Klik kanan gambar di bawah ini, lalu pilih **'Copy image'** / "
+                        "**'Salin gambar'** -- cara ini selalu berhasil di browser apa pun, "
+                        "termasuk lewat LAN."
+                    )
+                    st.image(st.session_state["png_bytes"])
             except Exception as e:
                 st.warning(f"Copy/Print tidak tersedia: {e}")
 
