@@ -22,6 +22,11 @@ output/
 *.log
 sync_log.txt
 scheduled_tasks.lock
+SKU_Terlewat.txt
+**/SKU_Terlewat.txt
+
+# Stray artifact (accidental file, not real output)
+/CSV
 
 # Claude Code local/session-specific config
 .claude/settings.local.json
@@ -29,3 +34,8 @@ scheduled_tasks.lock
 # OS
 Thumbs.db
 .DS_Store
+DB/auth/*.db
+DB/backup/*.db
+config/config.yaml
+__pycache__/
+*.pyc
