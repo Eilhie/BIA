@@ -11,17 +11,18 @@ levels:
   4: ""
   5: "Admin"
 
-# Halaman baca-saja (laporan/pencarian) -- level 1-2.
-# Halaman yang bisa UBAH data terpilih (SKU_LIST, jalankan Sync/Transpose,
-# kelola user) -- level 4-5.
+# Dikunci ketat untuk sementara (level 1-3 cuma Omset Seeker, level 4 dapat
+# tambahan Outlet Lapisan MClub) -- Dashboard/SKU Manifest/Cek Cutoff/Cek
+# Klaim SKU/Detail SKU Brand Besar/Atur SKU Sync sengaja digeser ke Admin
+# dulu, bukan bug, ubah di sini kalau nanti mau dibuka lagi ke level lain.
 pages:
   "omset_search_app.py": 1          # Omset Seeker (entry point utama)
-  "pages/0_Dashboard.py": 1
-  "pages/2_SKU_Manifest.py": 2
-  "pages/3_Cek_Klaim_SKU.py": 3
-  "pages/5_Outlet_Lapisan_MClub.py": 2
-  "pages/6_Cek_Cutoff_OMSHAR.py": 2
-  "pages/7_Detail_SKU_Brand_Besar.py": 2
-  "pages/4_Atur_SKU_Sync.py": 4     # edit file SKU_LIST yang kontrol Sync
+  "pages/5_Outlet_Lapisan_MClub.py": 4
+  "pages/0_Dashboard.py": 5
+  "pages/2_SKU_Manifest.py": 5
+  "pages/3_Cek_Klaim_SKU.py": 5
+  "pages/6_Cek_Cutoff_OMSHAR.py": 5
+  "pages/7_Detail_SKU_Brand_Besar.py": 5
+  "pages/4_Atur_SKU_Sync.py": 5     # edit file SKU_LIST yang kontrol Sync
   "pages/1_Sync_dan_Transpose.py": 5  # jalankan pipeline penuh, tulis ke DB produksi
   "pages/8_Kelola_User.py": 5         # kelola akun & lihat audit log

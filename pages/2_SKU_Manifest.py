@@ -14,7 +14,7 @@ import auth
 sys.path.insert(0, str(Path(r"D:\SDAAREA\omset_pipeline")))
 import transpose as t  # noqa: E402
 
-auth.require_level(2, page="SKU Manifest")
+auth.require_level(5, page="SKU Manifest")
 st.title("SKU Manifest")
 cap_col, btn_col = st.columns([5, 1])
 cap_col.caption(

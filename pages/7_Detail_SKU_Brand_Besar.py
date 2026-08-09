@@ -24,7 +24,7 @@ import auth
 import omset_seeker as os_
 import sku_lookup as sl
 
-auth.require_level(2, page="Detail SKU Brand Besar")
+auth.require_level(5, page="Detail SKU Brand Besar")
 st.title("Detail SKU Brand Besar")
 st.caption(
     "Pecahan varian SKU individual untuk brand-brand besar -- PALS, PLAG, PPIL, "

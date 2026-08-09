@@ -20,7 +20,7 @@ import auth
 sys.path.insert(0, str(Path(r"D:\SDAAREA\omset_pipeline")))
 import transpose as t  # noqa: E402
 
-auth.require_level(4, page="Atur SKU Sync")
+auth.require_level(5, page="Atur SKU Sync")
 st.title("Atur SKU Sync")
 st.caption(
     "Kelola daftar SKU yang ditarik dari server pas Sync. Tiap grup di bawah = 1 file "

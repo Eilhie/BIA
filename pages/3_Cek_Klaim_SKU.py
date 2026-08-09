@@ -15,7 +15,7 @@ import auth
 import omset_seeker
 import sku_lookup
 
-auth.require_level(3, page="Cek Klaim SKU")
+auth.require_level(5, page="Cek Klaim SKU")
 st.title("Cek Klaim SKU")
 st.caption(
     "QTY (KRT) per varian SKU individu, per outlet, trend Jan-Des 2026 -- dibaca "

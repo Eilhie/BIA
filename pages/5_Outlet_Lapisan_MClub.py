@@ -13,7 +13,7 @@ import streamlit as st
 import auth
 import mclub_pipeline as mp
 
-auth.require_level(2, page="Outlet Lapisan (MClub)")
+auth.require_level(4, page="Outlet Lapisan (MClub)")
 st.title("Outlet Lapisan (MClub)")
 st.caption(
     "Klasifikasi tier outlet (Gold/Platinum/MCLUB) + analisis kompetitif, dihitung "

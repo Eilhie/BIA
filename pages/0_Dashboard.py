@@ -18,7 +18,7 @@ import transpose as t  # noqa: E402
 
 from omset_seeker import find_latest_toko_gabungan, get_cutoff_date, load_gabungan_map  # noqa: E402
 
-auth.require_level(1, page="Dashboard")
+auth.require_level(5, page="Dashboard")
 st.title("Dashboard")
 
 DB_DIR = Path(r"D:\DB OMSHAR\DB")
