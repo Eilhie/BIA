@@ -17,7 +17,6 @@ import auth
 sys.path.insert(0, str(Path(r"D:\SDAAREA\omset_pipeline")))
 import transpose as t  # noqa: E402
 
-st.set_page_config(page_title="Cek Cutoff OMSHAR", layout="wide")
 auth.require_level(2, page="Cek Cutoff OMSHAR")
 st.title("Cek Cutoff OMSHAR")
 st.caption(

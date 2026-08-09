@@ -33,7 +33,6 @@ from render_outlet_image import (
     render_outlet_report,
 )
 
-st.set_page_config(page_title="OMSET Seeker", layout="wide")
 auth.require_level(1, page="Omset Seeker")
 st.title("OMSET Seeker")
 

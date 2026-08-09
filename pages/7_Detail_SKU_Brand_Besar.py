@@ -24,7 +24,6 @@ import auth
 import omset_seeker as os_
 import sku_lookup as sl
 
-st.set_page_config(page_title="Detail SKU Brand Besar", layout="wide")
 auth.require_level(2, page="Detail SKU Brand Besar")
 st.title("Detail SKU Brand Besar")
 st.caption(

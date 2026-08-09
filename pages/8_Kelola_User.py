@@ -11,7 +11,6 @@ import streamlit as st
 import auth
 import database as db
 
-st.set_page_config(page_title="Kelola User", layout="wide")
 current = auth.require_level(5, page="Kelola User")
 st.title("Kelola User")
 st.caption(
@@ -20,8 +19,8 @@ st.caption(
 )
 
 with st.expander("Keterangan level", expanded=False):
-    for lvl, label in sorted(auth.LEVEL_LABELS.items()):
-        st.caption(f"**{lvl}** -- {label}")
+    for lvl in sorted(auth.LEVEL_LABELS.keys()):
+        st.caption(f"**{auth.level_display(lvl)}**")
 
 st.divider()
 st.subheader("0. Permintaan akun baru (pending)")
@@ -43,7 +42,7 @@ else:
             rc2.caption(req["note"] or "(tidak ada catatan)")
             req_level = rc3.selectbox(
                 "Level", options=sorted(auth.LEVEL_LABELS.keys()), index=1,
-                format_func=lambda l: f"{l} - {auth.LEVEL_LABELS[l]}", key=f"req_level_{req['id']}",
+                format_func=auth.level_display, key=f"req_level_{req['id']}",
                 label_visibility="collapsed",
             )
             if rc4.button("Setujui", key=f"approve_{req['id']}", type="primary"):
@@ -68,7 +67,7 @@ with st.form("add_user_form", clear_on_submit=True):
     new_username = c1.text_input("Username")
     new_password = c2.text_input("Password", type="password")
     new_level = c3.selectbox("Level", options=sorted(auth.LEVEL_LABELS.keys()), index=1,
-                              format_func=lambda l: f"{l} - {auth.LEVEL_LABELS[l]}")
+                              format_func=auth.level_display)
     add_submitted = st.form_submit_button("Tambah User", type="primary")
 
 if add_submitted:
@@ -82,7 +81,7 @@ if add_submitted:
     else:
         db.create_user(uname, auth._hash_password(new_password), new_level)
         db.log_action(current["username"], "tambah_user", f"{uname} -> level {new_level}")
-        st.success(f"User '{uname}' dibuat dengan level {new_level} ({auth.level_label(new_level)}).")
+        st.success(f"User '{uname}' dibuat dengan {auth.level_display(new_level)}.")
         st.rerun()
 
 st.divider()
@@ -95,14 +94,14 @@ else:
     active_level5 = [u["username"] for u in users if u["level"] == 5 and u["active"]]
     for u in users:
         with st.expander(
-            f"{u['username']} -- level {u['level']} ({auth.level_label(u['level'])})"
+            f"{u['username']} -- {auth.level_display(u['level'])}"
             + ("" if u["active"] else "  [NONAKTIF]"),
             expanded=False,
         ):
             ec1, ec2, ec3 = st.columns([2, 2, 2])
             edit_level = ec1.selectbox(
                 "Level", options=sorted(auth.LEVEL_LABELS.keys()), index=u["level"],
-                format_func=lambda l: f"{l} - {auth.LEVEL_LABELS[l]}", key=f"level_{u['username']}",
+                format_func=auth.level_display, key=f"level_{u['username']}",
             )
             edit_active = ec2.checkbox("Aktif", value=u["active"], key=f"active_{u['username']}")
             new_pw = ec3.text_input("Reset password (kosongkan kalau tidak diubah)",

@@ -4,11 +4,11 @@
 # lain, tidak perlu edit kode.
 
 levels:
-  0: "Nonaktif"
-  1: "Viewer"
-  2: "Analyst"
-  3: "Analyst Senior"
-  4: "Supervisor SKU"
+  0: ""
+  1: ""
+  2: ""
+  3: ""
+  4: ""
   5: "Admin"
 
 # Halaman baca-saja (laporan/pencarian) -- level 1-2.

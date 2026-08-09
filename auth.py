@@ -48,7 +48,14 @@ SESSION_LIFETIME_HOURS = 24
 
 
 def level_label(level: int) -> str:
-    return LEVEL_LABELS.get(level, f"Level {level}")
+    return LEVEL_LABELS.get(level, "")
+
+
+def level_display(level: int) -> str:
+    """'Level N' polos, atau 'Level N - Label' kalau level itu punya title
+    di config.yaml (saat ini cuma level 5 -- 'Admin' -- yang punya)."""
+    label = level_label(level)
+    return f"Level {level} - {label}" if label else f"Level {level}"
 
 
 def _hash_password(password: str) -> str:
@@ -214,7 +221,7 @@ def _render_user_bar(user: dict):
     posisinya selalu terasa aneh di sana (nempel di bawah nav, jauh dari nav
     di scroll panjang, dsb)."""
     c1, c2 = st.columns([6, 1])
-    c1.caption(f"Halo, **{user['username']}** (Level {user['level']} -- {level_label(user['level'])})")
+    c1.caption(f"Halo, **{user['username']}** ({level_display(user['level'])})")
     if c2.button("Logout", key="auth_logout_btn"):
         db.log_action(user["username"], "logout", "")
         _end_session()
@@ -222,9 +229,14 @@ def _render_user_bar(user: dict):
     st.divider()
 
 
-def require_level(min_level: int, page: str = ""):
-    """Panggil di baris paling atas tiap halaman. Return dict user kalau lolos,
-    kalau tidak lolos halaman dihentikan (st.stop()) di dalam fungsi ini."""
+def get_current_user() -> dict:
+    """Panggil di ENTRY POINT (app.py) SEBELUM membangun st.navigation() --
+    pastikan sudah ada user yang login (tampilkan login/setup-admin-pertama
+    kalau belum), TANPA cek level tertentu -- itu urusan require_level() per
+    halaman dan filter daftar nav di app.py (biar menu yang tidak boleh
+    diakses user memang tidak pernah muncul, bukan cuma diblokir pas diklik).
+    Aman dipanggil berkali-kali per run (mis. app.py lalu require_level() di
+    halaman aktif) -- cookie manager sudah di-cache per sesi, tidak dobel."""
     _try_restore_from_cookie()
 
     if "auth_user" not in st.session_state:
@@ -232,16 +244,25 @@ def require_level(min_level: int, page: str = ""):
             _bootstrap_admin_form()
         else:
             _login_form()
-        return None  # tidak pernah tercapai -- st.stop() di atas selalu jalan lebih dulu
+        raise RuntimeError("unreachable")  # st.stop() di atas selalu jalan lebih dulu
 
-    user = st.session_state["auth_user"]
+    return st.session_state["auth_user"]
+
+
+def require_level(min_level: int, page: str = ""):
+    """Panggil di baris paling atas tiap halaman. Return dict user kalau lolos,
+    kalau tidak lolos halaman dihentikan (st.stop()) di dalam fungsi ini.
+    Tetap dicek di sini (bukan cuma mengandalkan menu yang disembunyikan di
+    app.py) sebagai lapis pertahanan kedua -- jaga-jaga kalau halaman diakses
+    langsung lewat URL yang harusnya tidak terlihat di menu user itu."""
+    user = get_current_user()
 
     if user["level"] < min_level:
         _render_user_bar(user)
         st.error(
             f"Akses ditolak. Halaman ini butuh level minimal {min_level} "
-            f"({level_label(min_level)}), akun Anda level {user['level']} "
-            f"({level_label(user['level'])}). Hubungi Admin kalau butuh akses lebih tinggi."
+            f"({level_display(min_level)}), akun Anda {level_display(user['level'])}. "
+            f"Hubungi Admin kalau butuh akses lebih tinggi."
         )
         st.stop()
 
