@@ -17,7 +17,7 @@ import auth
 sys.path.insert(0, str(Path(r"D:\SDAAREA\omset_pipeline")))
 import transpose as t  # noqa: E402
 
-auth.require_level(2, page="Cek Cutoff OMSHAR")
+auth.require_level(5, page="Cek Cutoff OMSHAR")
 st.title("Cek Cutoff OMSHAR")
 st.caption(
     "Cutoff diambil dari baris 'PERIODE : ...' di dalam tiap file OMSHAR mentah itu "
