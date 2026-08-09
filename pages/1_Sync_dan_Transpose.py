@@ -49,7 +49,6 @@ def _fmt_duration(seconds: float) -> str:
         return f"{m}m {s}d"
     return f"{s}d"
 
-st.set_page_config(page_title="Sync & Transpose", layout="wide")
 auth.require_level(5, page="Sync dan Transpose")
 st.title("Sync & Transpose OMSHAR")
 
