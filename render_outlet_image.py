@@ -8,6 +8,7 @@ Render laporan OMSET per outlet jadi gambar (PNG), meniru layout OMSET OUTLET as
 
 import io
 import os
+import time
 import uuid
 from pathlib import Path
 
@@ -331,7 +332,23 @@ def render_outlet_report(
         # tidak perlu plt.close(fig) -- fig dibuat lewat Figure() langsung, tidak
         # pernah terdaftar di registry global pyplot, jadi tidak ada yang perlu
         # dibersihkan di sana. Cukup dibiarkan di-garbage-collect begitu fig keluar scope.
-        os.replace(tmp_path, out_path)
+        #
+        # os.replace() bisa gagal SESAAT dengan PermissionError (WinError 32,
+        # "process cannot access the file") kalau file .tmp yang baru saja
+        # ditulis masih sempat dikunci sebentar oleh proses lain -- paling
+        # sering Windows Defender/antivirus real-time scan yang otomatis scan
+        # file yang baru dibuat (persis pola yang sudah ditemukan & diperbaiki
+        # di omset_pipeline/transpose.py._replace_with_retry() -- terbukti
+        # nyata dari error "Copy/Print tidak tersedia: [WinError 32]" yang
+        # dilaporkan user). Lock semacam ini biasanya lepas dalam <1-2 detik.
+        for attempt in range(6):
+            try:
+                os.replace(tmp_path, out_path)
+                break
+            except PermissionError:
+                if attempt == 5:
+                    raise
+                time.sleep(0.5)
     finally:
         tmp_path.unlink(missing_ok=True)
 

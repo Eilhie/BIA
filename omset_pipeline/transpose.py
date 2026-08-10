@@ -157,16 +157,39 @@ HOREKA_KEG_FILE = {
 
 # ── CORE TRANSPOSE ────────────────────────────────────────────────────────────
 
+def _parse_periode(header_rows) -> tuple | None:
+    """Ekstrak (year, month, day) dari baris 'PERIODE : JAN sd DD/MM/YYYY'
+    (baris index 2 di header 8-baris) -- tuple diurut (Y,M,D) biar bisa
+    dibandingkan langsung ('>' = lebih baru). None kalau gagal parse."""
+    try:
+        text = str(header_rows[2][0])
+        date_part = text.split("sd")[-1].strip()
+        d, m, y = date_part.split("/")
+        return (int(y), int(m), int(d))
+    except Exception:
+        return None
+
+
 def stack_sheets(wb, sheet_order):
     """Gabungkan baris data dari sheet-sheet wilayah sesuai urutan.
 
-    Header (8 baris pertama) diambil dari sheet pertama yang tersedia.
+    Header (8 baris pertama) diambil dari sheet dengan PERIODE PALING BARU
+    di antara yang tersedia -- BUKAN cuma wilayah pertama di sheet_order.
+    Tiap wilayah punya baris PERIODE sendiri-sendiri dan bisa ke-update di
+    waktu berbeda (dikonfirmasi nyata: BTN -- selalu wilayah pertama di
+    DAPUL/HOREKA -- sering lagging beberapa hari dibanding wilayah lain
+    seperti DKI/JBU/SMB, jadi kalau header selalu diambil dari wilayah
+    pertama yang tersedia, cutoff yang dilaporkan APLIKASI jadi understated
+    walau wilayah lain di file yang sama sudah lebih baru). Fallback ke
+    "sheet pertama yang tersedia" tetap dipakai kalau PERIODE-nya gagal
+    di-parse di semua sheet.
     Mengembalikan (header_rows, data_rows) atau (None, []) jika tidak
     ada satu pun sheet wilayah yang ditemukan.
     """
-    header     = None
-    data_rows  = []
-    available  = set(wb.sheet_names())
+    header         = None
+    header_periode = None
+    data_rows      = []
+    available      = set(wb.sheet_names())
 
     for name in sheet_order:
         if name not in available:
@@ -175,11 +198,16 @@ def stack_sheets(wb, sheet_order):
         if sh.nrows <= HEADER_ROWS:
             continue
 
-        if header is None:
-            header = [
-                [sh.cell_value(r, c) for c in range(sh.ncols)]
-                for r in range(HEADER_ROWS)
-            ]
+        sheet_header = [
+            [sh.cell_value(r, c) for c in range(sh.ncols)]
+            for r in range(HEADER_ROWS)
+        ]
+        sheet_periode = _parse_periode(sheet_header)
+
+        if header is None or (sheet_periode is not None
+                               and (header_periode is None or sheet_periode > header_periode)):
+            header = sheet_header
+            header_periode = sheet_periode
 
         ncols = sh.ncols
         for r in range(HEADER_ROWS, sh.nrows):
