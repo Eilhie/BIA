@@ -13,7 +13,7 @@ from pathlib import Path
 import openpyxl
 import pandas as pd
 
-CSV_DIR = Path(r"D:\SDAAREA\omset_pipeline\output\CSV")
+CSV_DIR = Path(__file__).resolve().parent / "omset_pipeline" / "output" / "CSV"
 TOKO_GABUNGAN_DIR = Path(r"D:\Data BIA\INFO BIA\Toko Gabungan")
 
 COL_WIL, COL_SITE, COL_CUST = 0, 1, 2
