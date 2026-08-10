@@ -27,7 +27,7 @@ from pathlib import Path
 import openpyxl
 import pandas as pd
 
-ARCHIVE_DIR = Path(r"D:\SDAAREA\mclub_pipeline")
+ARCHIVE_DIR = Path(__file__).resolve().parent / "mclub_pipeline"
 ARCHIVE_PATH = {"UMUM": ARCHIVE_DIR / "archive_umum.csv", "HOREKA": ARCHIVE_DIR / "archive_horeka.csv"}
 
 WORKING_FILE = {

@@ -41,7 +41,7 @@ from omset_seeker import (
     seek_outlet,
 )
 
-OUTPUT_DIR = Path(r"D:\SDAAREA\omset_pipeline\output\IMAGE")
+OUTPUT_DIR = Path(__file__).resolve().parent / "omset_pipeline" / "output" / "IMAGE"
 
 MONTHS_ID = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
 LABELS_25 = [f"{m}-25" for m in MONTHS_ID]

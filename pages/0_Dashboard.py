@@ -13,7 +13,7 @@ import streamlit as st
 
 import auth
 
-sys.path.insert(0, str(Path(r"D:\SDAAREA\omset_pipeline")))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "omset_pipeline"))
 import transpose as t  # noqa: E402
 
 from omset_seeker import find_latest_toko_gabungan, get_cutoff_date, load_gabungan_map  # noqa: E402
@@ -22,7 +22,7 @@ auth.require_level(5, page="Dashboard")
 st.title("Dashboard")
 
 DB_DIR = Path(r"D:\DB OMSHAR\DB")
-TRANSPOSED_DIR = Path(r"D:\SDAAREA\omset_pipeline\output\DB TRANSPOSED")
+TRANSPOSED_DIR = Path(__file__).resolve().parent.parent / "omset_pipeline" / "output" / "DB TRANSPOSED"
 SKU_LIST_DIR = Path(r"D:\DB OMSHAR\SKU_LIST")
 
 

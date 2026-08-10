@@ -34,9 +34,11 @@ import xlrd
 import openpyxl
 import pandas as pd
 
-OMSHAR_DIR = Path(os.environ.get("OMSHAR_DIR",       r"D:\SDAAREA\DB"))
-OUTPUT_DIR  = Path(os.environ.get("TRANSPOSE_OUT",   r"D:\SDAAREA\omset_pipeline\output\DB TRANSPOSED"))
-CSV_DIR     = Path(os.environ.get("TRANSPOSE_CSV",   r"D:\SDAAREA\omset_pipeline\output\CSV"))
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+OMSHAR_DIR = Path(os.environ.get("OMSHAR_DIR",     str(_PROJECT_ROOT / "DB")))
+OUTPUT_DIR  = Path(os.environ.get("TRANSPOSE_OUT", str(_PROJECT_ROOT / "omset_pipeline" / "output" / "DB TRANSPOSED")))
+CSV_DIR     = Path(os.environ.get("TRANSPOSE_CSV", str(_PROJECT_ROOT / "omset_pipeline" / "output" / "CSV")))
 
 DAPUL  = ['BTN', 'DKI', 'BDB', 'JBU', 'JBS', 'JTU', 'JTS', 'JIU', 'JIS', 'BLI']
 LAPUL  = ['SMU', 'SMB', 'SMS', 'LPB', 'NTR', 'KLT', 'KLB', 'SLS', 'SLU', 'PPA']
