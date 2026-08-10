@@ -28,65 +28,45 @@ st.caption(
 OMSHAR_DIR = Path(r"D:\DB OMSHAR\DB")
 
 
-def _read_file_cutoff(path: Path):
-    """Ambil PERIODE PALING BARU di antara SEMUA sheet wilayah dalam file --
-    BUKAN cuma sheet pertama. Tiap wilayah (BTN/DKI/JBU/dst) punya baris
-    PERIODE sendiri dan bisa ke-update di waktu berbeda -- kalau cuma baca
-    sheet pertama (dulu: names[0], hampir selalu BTN), cutoff yang dilaporkan
-    bisa understated padahal wilayah lain di file yang sama sudah lebih baru
-    (dikonfirmasi nyata: BTN sering lagging beberapa hari dari wilayah lain)."""
-    if not path.exists():
-        return None
-    import xlrd
-    try:
-        wb = xlrd.open_workbook(str(path), on_demand=True)
-        names = wb.sheet_names()
-        if not names:
-            return None
-        latest = None
-        for name in names:
-            sh = wb.sheet_by_name(name)
-            if sh.nrows <= 2:
-                continue
-            try:
-                periode_text = str(sh.cell_value(2, 0))
-                date_part = periode_text.split("sd")[-1].strip()
-                day, month, year = date_part.split("/")
-                dt = datetime(int(year), int(month), int(day))
-            except Exception:
-                continue
-            if latest is None or dt > latest:
-                latest = dt
-        wb.release_resources()
-        return latest
-    except Exception:
-        return None
-
-
-def _collect_rows(category: str, file_map: dict, label_suffix: str = "") -> list:
-    rows = []
+def _list_entries(category: str, file_map: dict, label_suffix: str = "") -> list:
+    entries = []
     for brand, files in file_map.items():
         for file_name in files:
             path = OMSHAR_DIR / f"OMSHAR {category} {file_name}.xls"
-            exists = path.exists()
-            cutoff = _read_file_cutoff(path) if exists else None
-            mtime = datetime.fromtimestamp(path.stat().st_mtime) if exists else None
-            rows.append({
-                "Brand": f"{brand}{label_suffix}",
-                "File": file_name,
-                "Ada": exists,
-                "Cutoff (isi file)": cutoff,
-                "Terakhir disync": mtime,
-            })
-    return rows
+            entries.append({"Brand": f"{brand}{label_suffix}", "File": file_name, "Path": path})
+    return entries
 
 
 @st.cache_data(show_spinner=False, ttl="10m")
 def build_cutoff_table(category: str) -> pd.DataFrame:
     file_map = t.UMUM_FILE if category == "UMUM" else t.HOREKA_FILE
-    rows = _collect_rows(category, file_map)
+    entries = _list_entries(category, file_map)
     if category == "HOREKA":
-        rows += _collect_rows("HOREKA", t.HOREKA_KEG_FILE, label_suffix=" (KEG)")
+        entries += _list_entries("HOREKA", t.HOREKA_KEG_FILE, label_suffix=" (KEG)")
+
+    # xlrd (.xls lama) TIDAK bisa baca satu sel tanpa parse seluruh sheet --
+    # dan tiap file perlu di-scan SEMUA sheet wilayahnya (bukan cuma satu,
+    # lihat catatan di transpose.py._file_max_periode) supaya cutoff yang
+    # dilaporkan tidak understated. Serial itu ~20 detik/file x ~30-an file
+    # per kategori = bisa 10 menit lebih (diukur nyata, bukan estimasi) --
+    # get_file_cutoffs() bagi kerja ini lewat multiprocessing.Pool.
+    paths = [str(e["Path"]) for e in entries]
+    cutoff_by_path = t.get_file_cutoffs(paths)
+
+    rows = []
+    for e in entries:
+        path = e["Path"]
+        exists = path.exists()
+        periode = cutoff_by_path.get(str(path))
+        cutoff = datetime(*periode) if periode else None
+        mtime = datetime.fromtimestamp(path.stat().st_mtime) if exists else None
+        rows.append({
+            "Brand": e["Brand"],
+            "File": e["File"],
+            "Ada": exists,
+            "Cutoff (isi file)": cutoff,
+            "Terakhir disync": mtime,
+        })
     return pd.DataFrame(rows)
 
 
