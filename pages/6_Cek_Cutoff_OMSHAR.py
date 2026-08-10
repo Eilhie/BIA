@@ -29,6 +29,12 @@ OMSHAR_DIR = Path(r"D:\DB OMSHAR\DB")
 
 
 def _read_file_cutoff(path: Path):
+    """Ambil PERIODE PALING BARU di antara SEMUA sheet wilayah dalam file --
+    BUKAN cuma sheet pertama. Tiap wilayah (BTN/DKI/JBU/dst) punya baris
+    PERIODE sendiri dan bisa ke-update di waktu berbeda -- kalau cuma baca
+    sheet pertama (dulu: names[0], hampir selalu BTN), cutoff yang dilaporkan
+    bisa understated padahal wilayah lain di file yang sama sudah lebih baru
+    (dikonfirmasi nyata: BTN sering lagging beberapa hari dari wilayah lain)."""
     if not path.exists():
         return None
     import xlrd
@@ -37,12 +43,22 @@ def _read_file_cutoff(path: Path):
         names = wb.sheet_names()
         if not names:
             return None
-        sh = wb.sheet_by_name(names[0])
-        periode_text = str(sh.cell_value(2, 0))
+        latest = None
+        for name in names:
+            sh = wb.sheet_by_name(name)
+            if sh.nrows <= 2:
+                continue
+            try:
+                periode_text = str(sh.cell_value(2, 0))
+                date_part = periode_text.split("sd")[-1].strip()
+                day, month, year = date_part.split("/")
+                dt = datetime(int(year), int(month), int(day))
+            except Exception:
+                continue
+            if latest is None or dt > latest:
+                latest = dt
         wb.release_resources()
-        date_part = periode_text.split("sd")[-1].strip()
-        day, month, year = date_part.split("/")
-        return datetime(int(year), int(month), int(day))
+        return latest
     except Exception:
         return None
 
