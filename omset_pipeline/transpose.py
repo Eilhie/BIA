@@ -172,6 +172,56 @@ def _parse_periode(header_rows) -> tuple | None:
         return None
 
 
+def _file_max_periode(path_str: str):
+    """Baca PERIODE PALING BARU di antara SEMUA sheet wilayah dalam SATU file
+    mentah. xlrd (format .xls lama) tidak bisa baca satu sel tanpa parse
+    seluruh sheet lebih dulu -- baca 1 file (~20 sheet wilayah) makan waktu
+    ~15-25 detik, dan halaman diagnostik (Cek Cutoff OMSHAR) perlu baca INI
+    untuk PULUHAN file sekaligus (lihat get_file_cutoffs())."""
+    path = Path(path_str)
+    if not path.exists():
+        return None
+    try:
+        wb = xlrd.open_workbook(path_str, on_demand=True)
+        best = None
+        for name in wb.sheet_names():
+            sh = wb.sheet_by_name(name)
+            if sh.nrows <= HEADER_ROWS:
+                continue
+            header = [[sh.cell_value(r, c) for c in range(sh.ncols)] for r in range(HEADER_ROWS)]
+            p = _parse_periode(header)
+            if p and (best is None or p > best):
+                best = p
+        wb.release_resources()
+        return best
+    except Exception:
+        return None
+
+
+def get_file_cutoffs(paths: list[str]) -> dict:
+    """Return {path_str: (y,m,d) atau None} untuk banyak file mentah SEKALIGUS.
+
+    SENGAJA serial, bukan paralel -- dua percobaan paralelisasi sudah dicoba
+    dan sama-sama tidak aman/tidak membantu untuk kasus ini:
+    1. multiprocessing.Pool: Windows 'spawn' butuh re-import modul __main__,
+       dan skrip halaman Streamlit BUKAN __main__ yang bersih (dieksekusi
+       lewat runpy oleh Streamlit/AppTest sendiri) -- terbukti nyata, tiap
+       worker malah re-run SELURUH halaman dari awal (termasuk gerbang
+       login) alih-alih cuma jalanin fungsi worker-nya, proses meledak.
+       (run_umum() dkk aman pakai Pool karena dipanggil dari SUBPROCESS
+       python terpisah lewat pages/1_Sync_dan_Transpose.py, bukan in-process
+       -- itu __main__ yang sungguhan, konteks beda.)
+    2. ThreadPoolExecutor: aman (tidak re-import apa pun), tapi TIDAK
+       membantu -- parsing xlrd itu CPU-bound murni Python, GIL bikin
+       thread-thread saling tunggu, terbukti nyata 6 file tetap >90 detik
+       (harusnya ~120 detik kalau serial, jadi threading di sini nyaris
+       tidak ada gunanya untuk beban kerja ini).
+    Kalau nanti benar-benar perlu dipercepat, caranya harus lewat SUBPROCESS
+    python terpisah (pola yang sama seperti run_umum()/run_horeka()), bukan
+    in-process dari halaman Streamlit manapun."""
+    return {p: _file_max_periode(p) for p in paths}
+
+
 def stack_sheets(wb, sheet_order):
     """Gabungkan baris data dari sheet-sheet wilayah sesuai urutan.
 
