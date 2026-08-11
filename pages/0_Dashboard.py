@@ -16,7 +16,12 @@ import auth
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "omset_pipeline"))
 import transpose as t  # noqa: E402
 
-from omset_seeker import find_latest_toko_gabungan, get_cutoff_date, load_gabungan_map  # noqa: E402
+from omset_seeker import (  # noqa: E402
+    find_latest_horeka_gabungan,
+    find_latest_toko_gabungan,
+    get_cutoff_date,
+    load_gabungan_map,
+)
 
 auth.require_level(5, page="Dashboard")
 st.title("Dashboard")
@@ -96,29 +101,37 @@ if horeka_missing:
 
 st.divider()
 
-# ── 4. Toko Gabungan (UMUM: file eksternal, HOREKA: didefinisikan manual) ──────
+# ── 4. Toko Gabungan (UMUM & HOREKA: masing-masing file Excel eksternal terpisah) ──
 gab_title_col, gab_btn_col = st.columns([5, 1])
 gab_title_col.subheader("Toko Gabungan")
 if gab_btn_col.button("Refresh"):
     # load_gabungan_map() cuma ke-clear otomatis lewat halaman Transpose (lihat
-    # pages/1_Sync_dan_Transpose.py) -- kalau file Toko Gabungan bulanan diganti
+    # pages/1_Sync_dan_Transpose.py) -- kalau file Gabungan (UMUM/HOREKA) diganti
     # TANPA jalanin transpose (file terpisah, update manual, tidak selalu bareng
     # siklus sync OMSHAR), tidak ada yang trigger refresh. Tombol ini jalan pintasnya.
     load_gabungan_map.cache_clear()
     st.rerun()
 
-gab_path = find_latest_toko_gabungan()
-if gab_path is None:
-    st.warning("File Toko Gabungan (UMUM) tidak ditemukan.")
-else:
-    gab_map = load_gabungan_map("UMUM")
-    g1, g2 = st.columns(2)
-    g1.metric("File UMUM aktif", gab_path.name)
-    g2.metric("Grup gabungan UMUM", len(gab_map))
+gc1, gc2 = st.columns(2)
+with gc1:
+    gab_path = find_latest_toko_gabungan()
+    if gab_path is None:
+        st.warning("File Toko Gabungan (UMUM) tidak ditemukan.")
+    else:
+        gab_map = load_gabungan_map("UMUM")
+        st.metric("File UMUM aktif", gab_path.name)
+        st.metric("Grup gabungan UMUM", len(gab_map))
 
-horeka_gab_map = load_gabungan_map("HOREKA")
-st.metric("Grup gabungan HOREKA (didefinisikan manual)", len(horeka_gab_map))
-st.caption("Atur grup gabungan HOREKA lewat halaman **Atur Gabungan HOREKA**.")
+with gc2:
+    horeka_gab_path = find_latest_horeka_gabungan()
+    if horeka_gab_path is None:
+        st.warning("File Gabungan HOREKA tidak ditemukan.")
+    else:
+        horeka_gab_map = load_gabungan_map("HOREKA")
+        st.metric("File HOREKA aktif", horeka_gab_path.name)
+        st.metric("Grup gabungan HOREKA", len(horeka_gab_map))
+
+st.caption("Lihat isi tiap grup gabungan HOREKA di halaman **Gabungan HOREKA**.")
 
 st.divider()
 

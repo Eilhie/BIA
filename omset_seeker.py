@@ -16,11 +16,10 @@ import pandas as pd
 CSV_DIR = Path(__file__).resolve().parent / "omset_pipeline" / "output" / "CSV"
 TOKO_GABUNGAN_DIR = Path(r"D:\Data BIA\INFO BIA\Toko Gabungan")
 
-# UMUM: grup gabungan sumbernya file Excel bulanan dari divisi lain (lihat
-# find_latest_toko_gabungan()). HOREKA tidak punya proses/file semacam itu sama
-# sekali -- jadi didefinisikan MANUAL lewat halaman Atur Gabungan HOREKA,
-# disimpan lokal di sini, independen total dari sumber UMUM.
-HOREKA_GABUNGAN_PATH = Path(__file__).resolve().parent / "data" / "horeka_gabungan.csv"
+# UMUM: grup gabungan sumbernya file Excel bulanan dari divisi lain, satu file
+# berisi banyak grup (lihat find_latest_toko_gabungan()). HOREKA tidak punya
+# proses/file semacam itu sama sekali -- jadi pakai file TERPISAH di folder yang
+# sama, format beda (satu sheet = satu grup), lihat find_latest_horeka_gabungan().
 
 COL_WIL, COL_SITE, COL_CUST = 0, 1, 2
 COL_PROPINSI, COL_KOTA, COL_KECAMATAN, COL_ALAMAT = 11, 12, 13, 18
@@ -278,37 +277,78 @@ def _gabungan_from_block_sheet(ws) -> dict:
     return gabungan_map
 
 
-def _gabungan_from_csv_rows(rows: list[dict]) -> dict:
-    """Sama seperti _gabungan_from_flat_sheet() tapi dari baris CSV lokal (bukan file Excel
-    eksternal) -- dipakai HOREKA Gabungan yang didefinisikan sendiri lewat halaman Atur
-    Gabungan HOREKA. Kolom yang dipakai: Site, Group, Wilayah (Outlet cuma buat tampilan
-    di halaman itu, tidak perlu di sini)."""
-    groups: dict[str, dict] = {}
-    for row in rows:
-        site, group_name, wilayah = row.get("Site"), row.get("Group"), row.get("Wilayah")
-        if not site or not group_name:
-            continue
-        g = groups.setdefault(str(group_name).strip(), {"wilayah": wilayah, "sites": []})
-        g["sites"].append(str(site).strip())
+_HOREKA_GABUNGAN_NAME_RE = re.compile(
+    r"^Gabungan HOREKA Update (\d{1,2}) (\w+) (\d{4})\.xlsx$", re.IGNORECASE
+)
 
-    gabungan_map = {}
-    for name, g in groups.items():
-        if len(g["sites"]) < 2:
+
+def find_latest_horeka_gabungan() -> Path | None:
+    """File 'Gabungan HOREKA Update {tgl} {bulan} {tahun}.xlsx' -- sama folder dan konvensi
+    penamaan/pemilihan-versi-terbaru dengan Toko Gabungan UMUM (lihat find_latest_toko_gabungan()
+    untuk alasan kenapa tanggal diambil dari NAMA FILE, bukan LastWriteTime), tapi prefix nama
+    beda sengaja supaya tidak pernah ke-mix sama file UMUM di folder yang sama."""
+    if not TOKO_GABUNGAN_DIR.exists():
+        return None
+    dated = []
+    for p in TOKO_GABUNGAN_DIR.glob("Gabungan HOREKA Update*.xlsx"):
+        if p.name.startswith("~$"):
             continue
-        gab_site = f"{g['sites'][0]}1"
-        gabungan_map[gab_site] = {"name": name, "wilayah": g["wilayah"], "children": g["sites"]}
+        m = _HOREKA_GABUNGAN_NAME_RE.match(p.name)
+        if not m:
+            continue
+        day, month_name, year = m.groups()
+        month = _INDO_MONTHS.get(month_name.lower())
+        if month is None:
+            continue
+        dated.append(((int(year), month, int(day)), p))
+    if not dated:
+        return None
+    return max(dated, key=lambda x: x[0])[1]
+
+
+def _gabungan_from_horeka_workbook(wb) -> dict:
+    """Format HOREKA: SATU SHEET = SATU GRUP (nama sheet = nama grup), beda dari UMUM yang
+    satu file/sheet berisi banyak grup sekaligus. Tiap baris dalam sheet = satu outlet
+    anggota grup itu, kolom dicari lewat header baris pertama (SITE/OUTLET/WILAYAH, urutan
+    bebas, case-insensitive) -- bukan posisi kolom tetap, supaya tidak gampang salah kalau
+    urutan kolom di file beda-beda antar sheet."""
+    gabungan_map = {}
+    for ws in wb.worksheets:
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            continue
+        header = [str(h).strip().upper() if h is not None else "" for h in rows[0]]
+        if "SITE" not in header or "WILAYAH" not in header:
+            continue  # sheet ini bukan format yang diharapkan, skip diam-diam
+        site_idx = header.index("SITE")
+        wilayah_idx = header.index("WILAYAH")
+
+        sites, wilayah = [], None
+        for row in rows[1:]:
+            if site_idx >= len(row) or not row[site_idx]:
+                continue
+            sites.append(str(row[site_idx]).strip())
+            if wilayah is None and wilayah_idx < len(row) and row[wilayah_idx]:
+                wilayah = str(row[wilayah_idx]).strip()
+        if len(sites) < 2:
+            continue
+
+        group_name = ws.title.strip()
+        gab_site = f"{sites[0]}1"
+        gabungan_map[gab_site] = {"name": group_name, "wilayah": wilayah or "-", "children": sites}
     return gabungan_map
 
 
 @lru_cache(maxsize=1)
 def load_horeka_gabungan_map() -> dict:
-    """Grup gabungan HOREKA, didefinisikan MANUAL lewat app (lihat pages/ Atur Gabungan
-    HOREKA) -- beda sumber total dari UMUM (file Excel bulanan dari divisi lain), karena
-    HOREKA tidak punya proses/file semacam itu sama sekali."""
-    if not HOREKA_GABUNGAN_PATH.exists():
+    """Grup gabungan HOREKA -- file 'Gabungan HOREKA Update ...' terpisah dari file Toko
+    Gabungan UMUM (beda konvensi: satu sheet = satu grup, bukan satu sheet banyak grup),
+    karena HOREKA tidak punya proses/file bawaan dari divisi lain sama sekali."""
+    path = find_latest_horeka_gabungan()
+    if path is None:
         return {}
-    df = pd.read_csv(HOREKA_GABUNGAN_PATH, dtype=str, encoding="utf-8-sig")
-    return _gabungan_from_csv_rows(df.to_dict("records"))
+    wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+    return _gabungan_from_horeka_workbook(wb)
 
 
 @lru_cache(maxsize=None)
@@ -319,7 +359,7 @@ def load_gabungan_map(omshar_type: str = "UMUM") -> dict:
     UMUM: file Toko Gabungan Excel bulanan dari divisi lain -- format file berubah antar
     bulan, pakai sheet 'Sheet1' (flat, baru) kalau ada, fallback ke format block lama
     (sheet pertama, mis. 'A11') kalau tidak.
-    HOREKA: didefinisikan manual lewat app, lihat load_horeka_gabungan_map()."""
+    HOREKA: file Gabungan HOREKA terpisah, satu sheet per grup -- lihat load_horeka_gabungan_map()."""
     if omshar_type == "HOREKA":
         return load_horeka_gabungan_map()
 

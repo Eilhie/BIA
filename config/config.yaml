@@ -27,4 +27,4 @@ pages:
   "pages/1_Sync_dan_Transpose.py": 5  # jalankan pipeline penuh, tulis ke DB produksi
   "pages/8_Kelola_User.py": 5         # kelola akun (level, aktif/nonaktif, password)
   "pages/9_Audit_Trail.py": 5         # log akses & percobaan login, terpisah dari Kelola User
-  "pages/10_Atur_Gabungan_HOREKA.py": 5  # definisikan grup gabungan HOREKA (manual, tidak ada file eksternal)
+  "pages/10_Atur_Gabungan_HOREKA.py": 5  # status/isi grup gabungan HOREKA (dari file Excel terpisah)
