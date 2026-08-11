@@ -15,6 +15,7 @@ import streamlit.components.v1 as components
 import pandas as pd
 
 import auth
+import database as db
 from omset_seeker import build_outlet_index, get_cutoff_date, load_brand, load_gabungan_map
 from render_outlet_image import (
     C_CELL_BRAND,
@@ -33,7 +34,7 @@ from render_outlet_image import (
     render_outlet_report,
 )
 
-auth.require_level(1, page="Omset Seeker")
+current_user = auth.require_level(1, page="Omset Seeker")
 st.title("OMSET Seeker")
 
 MAX_LIST_RESULTS = 30
@@ -101,24 +102,56 @@ def get_outlet_index(omshar_type: str):
     return build_outlet_index(omshar_type)
 
 
-def pick_outlet(site: str, omshar_type: str, with_keg: bool = False) -> None:
+def pick_outlet(site: str, omshar_type: str, with_keg: bool, outlet_name: str, wilayah: str, search_term: str) -> None:
     st.session_state["last_query"] = (site, omshar_type, with_keg)
+    detail = f"[{omshar_type}] {site} - {outlet_name} ({wilayah})"
+    if search_term:
+        detail += f" | dicari: '{search_term}'"
+    db.log_action(st.session_state["auth_user"]["username"], "lihat_outlet", detail)
 
 
 with st.sidebar:
     st.header("Daftar Outlet")
     list_type = st.radio("Grup", ["UMUM", "HOREKA"], horizontal=True, key="list_type")
-    list_query = st.text_input("Cari nama/kode outlet", key="list_query", placeholder="ketik untuk mencari...")
 
-    if list_query.strip():
-        with st.spinner(f"Memuat daftar outlet {list_type}..."):
-            outlets = get_outlet_index(list_type)
-        q = list_query.strip().lower()
-        matches = outlets[
-            outlets["Outlet"].str.lower().str.contains(q, na=False, regex=False)
-            | outlets["Site"].str.lower().str.contains(q, na=False, regex=False)
-        ]
+    # Index outlet di-load SEKALI di sini (bukan cuma pas ada query teks) supaya
+    # opsi filter Wilayah di bawah bisa langsung terisi -- aman karena sudah
+    # di-cache 10 menit lewat get_outlet_index(), jadi biaya penuhnya cuma
+    # kena sekali per grup per 10 menit, bukan tiap keystroke/rerun.
+    with st.spinner(f"Memuat daftar outlet {list_type}..."):
+        outlets = get_outlet_index(list_type)
+
+    list_query = st.text_input("Cari nama/kode outlet", key="list_query", placeholder="ketik untuk mencari...")
+    wilayah_options = sorted(outlets["Wilayah"].dropna().unique().tolist())
+    wilayah_filter = st.multiselect("Filter Wilayah", wilayah_options, key=f"wilayah_filter_{list_type}")
+
+    q = list_query.strip()
+    if q or wilayah_filter:
+        matches = outlets
+        if q:
+            ql = q.lower()
+            matches = matches[
+                matches["Outlet"].str.lower().str.contains(ql, na=False, regex=False)
+                | matches["Site"].str.lower().str.contains(ql, na=False, regex=False)
+            ]
+        if wilayah_filter:
+            matches = matches[matches["Wilayah"].isin(wilayah_filter)]
         n = len(matches)
+
+        # Audit: catat pencarian (teks dan/atau filter wilayah) -- di-dedup per
+        # kombinasi unik supaya rerun lain (mis. klik tombol outlet) yang tidak
+        # benar-benar mengubah pencarian tidak ikut nge-log ulang.
+        log_key = (list_type, q, tuple(sorted(wilayah_filter)))
+        if st.session_state.get("_last_logged_search") != log_key:
+            st.session_state["_last_logged_search"] = log_key
+            detail = f"[{list_type}]"
+            if q:
+                detail += f" query='{q}'"
+            if wilayah_filter:
+                detail += f" wilayah={','.join(wilayah_filter)}"
+            detail += f" -> {n} hasil"
+            db.log_action(current_user["username"], "cari_outlet", detail)
+
         if n == 0:
             st.caption("Tidak ada outlet yang cocok.")
         else:
@@ -134,10 +167,10 @@ with st.sidebar:
                     # HOREKA selalu pakai format With Keg secara default -- untuk UMUM
                     # flag ini otomatis diabaikan di bawah (want_keg = with_keg and
                     # q_type == "HOREKA"), jadi aman selalu True di sini.
-                    args=(row["Site"], list_type, True),
+                    args=(row["Site"], list_type, True, row["Outlet"], row["Wilayah"], q),
                 )
     else:
-        st.caption("Ketik nama atau kode outlet untuk mulai mencari.")
+        st.caption("Ketik nama/kode outlet, atau pilih wilayah, untuk mulai mencari.")
 
 if "last_query" in st.session_state:
     q_site, q_type, q_with_keg = st.session_state["last_query"]

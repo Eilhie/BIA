@@ -40,6 +40,7 @@ PAGE_DEFS = [
     ("pages/4_Atur_SKU_Sync.py", "Atur SKU Sync", False),
     ("pages/1_Sync_dan_Transpose.py", "Sync dan Transpose", False),
     ("pages/8_Kelola_User.py", "Kelola User", False),
+    ("pages/9_Audit_Trail.py", "Audit Trail", False),
 ]
 
 visible_pages = [

@@ -129,6 +129,42 @@ def get_logs_by_user(username: str, limit: int = 200):
         return cursor.fetchall()
 
 
+def query_logs(username: str = "", action: str = "", since: str = "", until: str = "",
+                limit: int = 500):
+    """Query access_log dengan filter opsional -- dipakai halaman Audit Trail
+    supaya bisa telusuri trail SATU orang secara spesifik (query per user),
+    bukan cuma scroll semua orang tercampur. Semua filter opsional (string
+    kosong = tidak difilter); since/until dalam format yang sama dengan
+    str(datetime.now()) supaya bisa dibandingkan langsung sebagai TEXT."""
+    query = 'SELECT timestamp, username, action, detail FROM access_log WHERE 1=1'
+    params = []
+    if username:
+        query += ' AND username = ?'
+        params.append(username)
+    if action:
+        query += ' AND action = ?'
+        params.append(action)
+    if since:
+        query += ' AND timestamp >= ?'
+        params.append(since)
+    if until:
+        query += ' AND timestamp <= ?'
+        params.append(until)
+    query += ' ORDER BY timestamp DESC LIMIT ?'
+    params.append(limit)
+    with get_connection() as conn:
+        cursor = conn.execute(query, params)
+        return cursor.fetchall()
+
+
+def get_distinct_actions() -> list:
+    """Daftar jenis aksi yang pernah tercatat -- buat opsi filter di halaman
+    Audit Trail (login, buka_halaman, cari_outlet, lihat_outlet, dsb)."""
+    with get_connection() as conn:
+        cursor = conn.execute('SELECT DISTINCT action FROM access_log ORDER BY action')
+        return [r[0] for r in cursor.fetchall()]
+
+
 def count_recent_failed_attempts(username: str, window_seconds: int = 300) -> int:
     """Hitung percobaan login GAGAL untuk satu username dalam window waktu
     terakhir (detik) -- dipakai auth.py untuk lockout sementara setelah
