@@ -96,7 +96,7 @@ if horeka_missing:
 
 st.divider()
 
-# ── 4. Toko Gabungan ─────────────────────────────────────────────────────────
+# ── 4. Toko Gabungan (UMUM: file eksternal, HOREKA: didefinisikan manual) ──────
 gab_title_col, gab_btn_col = st.columns([5, 1])
 gab_title_col.subheader("Toko Gabungan")
 if gab_btn_col.button("Refresh"):
@@ -109,12 +109,16 @@ if gab_btn_col.button("Refresh"):
 
 gab_path = find_latest_toko_gabungan()
 if gab_path is None:
-    st.warning("File Toko Gabungan tidak ditemukan.")
+    st.warning("File Toko Gabungan (UMUM) tidak ditemukan.")
 else:
-    gab_map = load_gabungan_map()
+    gab_map = load_gabungan_map("UMUM")
     g1, g2 = st.columns(2)
-    g1.metric("File aktif", gab_path.name)
-    g2.metric("Jumlah grup gabungan", len(gab_map))
+    g1.metric("File UMUM aktif", gab_path.name)
+    g2.metric("Grup gabungan UMUM", len(gab_map))
+
+horeka_gab_map = load_gabungan_map("HOREKA")
+st.metric("Grup gabungan HOREKA (didefinisikan manual)", len(horeka_gab_map))
+st.caption("Atur grup gabungan HOREKA lewat halaman **Atur Gabungan HOREKA**.")
 
 st.divider()
 

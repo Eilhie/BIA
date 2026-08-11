@@ -16,6 +16,12 @@ import pandas as pd
 CSV_DIR = Path(__file__).resolve().parent / "omset_pipeline" / "output" / "CSV"
 TOKO_GABUNGAN_DIR = Path(r"D:\Data BIA\INFO BIA\Toko Gabungan")
 
+# UMUM: grup gabungan sumbernya file Excel bulanan dari divisi lain (lihat
+# find_latest_toko_gabungan()). HOREKA tidak punya proses/file semacam itu sama
+# sekali -- jadi didefinisikan MANUAL lewat halaman Atur Gabungan HOREKA,
+# disimpan lokal di sini, independen total dari sumber UMUM.
+HOREKA_GABUNGAN_PATH = Path(__file__).resolve().parent / "data" / "horeka_gabungan.csv"
+
 COL_WIL, COL_SITE, COL_CUST = 0, 1, 2
 COL_PROPINSI, COL_KOTA, COL_KECAMATAN, COL_ALAMAT = 11, 12, 13, 18
 OMSET_COLS = list(range(140, 164))  # EK:FH = JAN 2025 - DES 2026
@@ -63,10 +69,10 @@ VALIDATION_BRAND = "BIR"
 DIV_AB1_BRAND = "DIV AB1"
 
 
-def resolve_site_list(site: str) -> list[str]:
+def resolve_site_list(site: str, omshar_type: str = "UMUM") -> list[str]:
     """Kalau `site` adalah kode toko gabungan (lihat load_gabungan_map), kembalikan daftar
     kode site toko anaknya. Kalau bukan, kembalikan [site] apa adanya."""
-    gabungan = load_gabungan_map().get(site)
+    gabungan = load_gabungan_map(omshar_type).get(site)
     return gabungan["children"] if gabungan else [site]
 
 
@@ -74,7 +80,7 @@ def get_brand_months(brand: str, site: str, omshar_type: str = "UMUM") -> dict:
     """Ambil nilai KRT per bulan untuk satu brand + site (0 semua jika tidak ada).
     Kalau `site` adalah kode toko gabungan, otomatis dijumlah dari semua toko anaknya --
     lihat resolve_site_list()."""
-    match = query_brand(brand, resolve_site_list(site), omshar_type)
+    match = query_brand(brand, resolve_site_list(site, omshar_type), omshar_type)
     if match.empty:
         return {m: 0 for m in MONTH_LABELS}
     return match[MONTH_LABELS].fillna(0).sum().to_dict()
@@ -272,13 +278,51 @@ def _gabungan_from_block_sheet(ws) -> dict:
     return gabungan_map
 
 
+def _gabungan_from_csv_rows(rows: list[dict]) -> dict:
+    """Sama seperti _gabungan_from_flat_sheet() tapi dari baris CSV lokal (bukan file Excel
+    eksternal) -- dipakai HOREKA Gabungan yang didefinisikan sendiri lewat halaman Atur
+    Gabungan HOREKA. Kolom yang dipakai: Site, Group, Wilayah (Outlet cuma buat tampilan
+    di halaman itu, tidak perlu di sini)."""
+    groups: dict[str, dict] = {}
+    for row in rows:
+        site, group_name, wilayah = row.get("Site"), row.get("Group"), row.get("Wilayah")
+        if not site or not group_name:
+            continue
+        g = groups.setdefault(str(group_name).strip(), {"wilayah": wilayah, "sites": []})
+        g["sites"].append(str(site).strip())
+
+    gabungan_map = {}
+    for name, g in groups.items():
+        if len(g["sites"]) < 2:
+            continue
+        gab_site = f"{g['sites'][0]}1"
+        gabungan_map[gab_site] = {"name": name, "wilayah": g["wilayah"], "children": g["sites"]}
+    return gabungan_map
+
+
 @lru_cache(maxsize=1)
-def load_gabungan_map() -> dict:
-    """Parse file Toko Gabungan jadi {kode_site_gabungan: {name, wilayah, children: [site,...]}}.
+def load_horeka_gabungan_map() -> dict:
+    """Grup gabungan HOREKA, didefinisikan MANUAL lewat app (lihat pages/ Atur Gabungan
+    HOREKA) -- beda sumber total dari UMUM (file Excel bulanan dari divisi lain), karena
+    HOREKA tidak punya proses/file semacam itu sama sekali."""
+    if not HOREKA_GABUNGAN_PATH.exists():
+        return {}
+    df = pd.read_csv(HOREKA_GABUNGAN_PATH, dtype=str, encoding="utf-8-sig")
+    return _gabungan_from_csv_rows(df.to_dict("records"))
+
+
+@lru_cache(maxsize=None)
+def load_gabungan_map(omshar_type: str = "UMUM") -> dict:
+    """Parse grup gabungan jadi {kode_site_gabungan: {name, wilayah, children: [site,...]}}.
     Kode gabungan sintetis (toko pertama + '1') tidak pernah muncul di data OMSHAR mentah.
 
-    Format file berubah antar bulan -- pakai sheet 'Sheet1' (flat, baru) kalau ada, fallback
-    ke format block lama (sheet pertama, mis. 'A11') kalau tidak."""
+    UMUM: file Toko Gabungan Excel bulanan dari divisi lain -- format file berubah antar
+    bulan, pakai sheet 'Sheet1' (flat, baru) kalau ada, fallback ke format block lama
+    (sheet pertama, mis. 'A11') kalau tidak.
+    HOREKA: didefinisikan manual lewat app, lihat load_horeka_gabungan_map()."""
+    if omshar_type == "HOREKA":
+        return load_horeka_gabungan_map()
+
     path = find_latest_toko_gabungan()
     if path is None:
         return {}
@@ -297,8 +341,8 @@ def seek_outlet(site: str, omshar_type: str = "UMUM", brands: list[str] | None =
     mentah, murni identitas turunan dari file Toko Gabungan."""
     brands = brands or BRAND_ORDER
 
-    gabungan = load_gabungan_map().get(site)
-    site_list = resolve_site_list(site)
+    gabungan = load_gabungan_map(omshar_type).get(site)
+    site_list = resolve_site_list(site, omshar_type)
 
     rows = []
     outlet_info = None
@@ -334,19 +378,19 @@ def build_outlet_index(omshar_type: str) -> pd.DataFrame:
     outlet). Pemanggil disarankan bungkus dengan @st.cache_data karena UMUM sendiri
     ~72rb baris, HOREKA ~15rb -- tidak mau di-dedup ulang tiap keystroke.
 
-    Untuk UMUM, kode toko gabungan (dari file Toko Gabungan) ikut disisipkan supaya bisa
-    dicari/dipilih juga -- kode ini sendiri tidak ada di data OMSHAR mentah."""
+    Kode toko gabungan (UMUM: file Toko Gabungan eksternal; HOREKA: didefinisikan manual
+    lewat Atur Gabungan HOREKA) ikut disisipkan supaya bisa dicari/dipilih juga -- kode
+    ini sendiri tidak ada di data OMSHAR mentah."""
     df = load_brand("BIR", omshar_type)
     idx = df[["Site", "Outlet", "Wilayah"]].drop_duplicates(subset="Site").reset_index(drop=True)
 
-    if omshar_type == "UMUM":
-        gabungan = load_gabungan_map()
-        if gabungan:
-            gab_rows = pd.DataFrame([
-                {"Site": site, "Outlet": f"{g['name']} (Gabungan)", "Wilayah": g["wilayah"]}
-                for site, g in gabungan.items()
-            ])
-            idx = pd.concat([gab_rows, idx], ignore_index=True)
+    gabungan = load_gabungan_map(omshar_type)
+    if gabungan:
+        gab_rows = pd.DataFrame([
+            {"Site": site, "Outlet": f"{g['name']} (Gabungan)", "Wilayah": g["wilayah"]}
+            for site, g in gabungan.items()
+        ])
+        idx = pd.concat([gab_rows, idx], ignore_index=True)
 
     return idx
 

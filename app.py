@@ -41,6 +41,7 @@ PAGE_DEFS = [
     ("pages/1_Sync_dan_Transpose.py", "Sync dan Transpose", False),
     ("pages/8_Kelola_User.py", "Kelola User", False),
     ("pages/9_Audit_Trail.py", "Audit Trail", False),
+    ("pages/10_Atur_Gabungan_HOREKA.py", "Atur Gabungan HOREKA", False),
 ]
 
 visible_pages = [
