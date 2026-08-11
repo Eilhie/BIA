@@ -1,105 +1,66 @@
 """
-ATUR GABUNGAN HOREKA
-Definisikan grup toko HOREKA yang mau digabung jadi satu identitas laporan --
-sama seperti Toko Gabungan UMUM, tapi UMUM sumbernya file Excel bulanan dari
-divisi lain, sementara HOREKA tidak punya proses/file semacam itu sama sekali,
-jadi didefinisikan manual di sini. Data disimpan lokal (CSV), independen
-total dari sumber UMUM -- lihat omset_seeker.HOREKA_GABUNGAN_PATH.
+GABUNGAN HOREKA
+Status & isi grup gabungan HOREKA -- sumbernya file Excel eksternal
+"Gabungan HOREKA Update {tgl} {bulan} {tahun}.xlsx" di folder yang sama
+dengan Toko Gabungan UMUM (D:\\Data BIA\\INFO BIA\\Toko Gabungan), TAPI format
+beda: SATU SHEET = SATU GRUP (nama sheet = nama grup), tiap baris di sheet
+itu satu outlet anggota (kolom SITE/OUTLET/WILAYAH, urutan bebas).
+
+Halaman ini cuma BACA & TAMPILKAN -- editing grupnya dilakukan di file Excel
+itu sendiri (sama seperti Toko Gabungan UMUM), bukan lewat form di app ini.
 """
 
 import pandas as pd
 import streamlit as st
 
 import auth
-import database as db
 import omset_seeker as os_
 
-current = auth.require_level(5, page="Atur Gabungan HOREKA")
-st.title("Atur Gabungan HOREKA")
+auth.require_level(5, page="Gabungan HOREKA")
+st.title("Gabungan HOREKA")
 st.caption(
-    "Gabungkan beberapa site HOREKA jadi satu identitas laporan (mis. beberapa outlet "
-    "di lokasi yang sama) -- sekali dibuat, kode gabungannya otomatis muncul di "
-    "pencarian Omset Seeker grup HOREKA dan angkanya dijumlah dari semua toko anaknya, "
-    "persis seperti Toko Gabungan UMUM."
+    "Grup gabungan HOREKA dibaca dari file Excel terpisah -- **satu sheet = satu grup** "
+    "(nama sheet jadi nama grup), tiap baris di sheet itu satu outlet anggota dengan "
+    "kolom SITE, OUTLET, WILAYAH. Sekali file ini di-update, grup gabungannya otomatis "
+    "muncul di pencarian Omset Seeker grup HOREKA dan angkanya dijumlah dari semua "
+    "toko anaknya -- persis seperti Toko Gabungan UMUM."
 )
 
-
-def _load_rows() -> pd.DataFrame:
-    if os_.HOREKA_GABUNGAN_PATH.exists():
-        return pd.read_csv(os_.HOREKA_GABUNGAN_PATH, dtype=str, encoding="utf-8-sig")
-    return pd.DataFrame(columns=["Wilayah", "Site", "Outlet", "Group"])
-
-
-def _save_rows(df: pd.DataFrame) -> None:
-    os_.HOREKA_GABUNGAN_PATH.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(os_.HOREKA_GABUNGAN_PATH, index=False, encoding="utf-8-sig")
+col_cap, col_btn = st.columns([5, 1])
+col_cap.caption(f"Sumber: `{os_.TOKO_GABUNGAN_DIR}` -- pola nama file: `Gabungan HOREKA Update <tgl> <bulan> <tahun>.xlsx`")
+if col_btn.button("Refresh"):
     os_.load_horeka_gabungan_map.cache_clear()
     os_.load_gabungan_map.cache_clear()
+    st.rerun()
 
-
-@st.cache_data(show_spinner=False, ttl="10m")
-def _horeka_outlet_names() -> dict:
-    idx = os_.build_outlet_index("HOREKA")
-    return idx.set_index("Site")["Outlet"].to_dict()
-
-
-rows_df = _load_rows()
-groups = sorted(rows_df["Group"].dropna().unique().tolist()) if not rows_df.empty else []
-
-st.divider()
-st.subheader(f"Grup yang sudah ada ({len(groups)})")
-
-if not groups:
-    st.info("Belum ada grup gabungan HOREKA.")
+gab_path = os_.find_latest_horeka_gabungan()
+if gab_path is None:
+    st.warning(
+        "File 'Gabungan HOREKA Update ...' belum ditemukan di folder itu. Buat file baru "
+        "dengan pola nama itu (persis, termasuk tanggal dalam Bahasa Indonesia, mis. "
+        "'Gabungan HOREKA Update 11 Agustus 2026.xlsx'), satu sheet per grup, kolom "
+        "SITE/OUTLET/WILAYAH di baris pertama tiap sheet."
+    )
 else:
-    outlet_names = _horeka_outlet_names()
-    for g in groups:
-        g_rows = rows_df[rows_df["Group"] == g]
-        wilayah = g_rows["Wilayah"].iloc[0] if not g_rows.empty else "-"
-        with st.expander(f"{g} -- {wilayah} -- {len(g_rows)} toko"):
-            for _, r in g_rows.iterrows():
-                name = outlet_names.get(r["Site"], "(tidak ditemukan di data HOREKA)")
-                st.caption(f"`{r['Site']}` -- {name}")
-            if st.button("Hapus grup ini", key=f"del_gab_{g}"):
-                _save_rows(rows_df[rows_df["Group"] != g])
-                db.log_action(current["username"], "hapus_gabungan_horeka", g)
-                st.success(f"Grup '{g}' dihapus.")
-                st.rerun()
+    gab_map = os_.load_gabungan_map("HOREKA")
+    g1, g2 = st.columns(2)
+    g1.metric("File aktif", gab_path.name)
+    g2.metric("Jumlah grup gabungan", len(gab_map))
 
-st.divider()
-st.subheader("Tambah grup baru")
+    st.divider()
 
-with st.form("gabungan_form", clear_on_submit=True):
-    group_name = st.text_input("Nama grup (jadi nama laporan gabungan)")
-    wilayah = st.text_input("Wilayah (kode, mis. BTN/DKI/BLI/...)")
-    site_codes = st.text_area("Kode site HOREKA yang digabung (satu per baris, minimal 2)", height=120)
-    submitted = st.form_submit_button("Buat Grup", type="primary")
-
-if submitted:
-    name = group_name.strip()
-    wil = wilayah.strip().upper()
-    codes = [c.strip() for c in site_codes.splitlines() if c.strip()]
-    if not name or not wil:
-        st.error("Nama grup dan wilayah wajib diisi.")
-    elif len(codes) < 2:
-        st.error("Minimal 2 kode site untuk digabung.")
-    elif name in groups:
-        st.error(f"Grup '{name}' sudah ada -- hapus dulu kalau mau ganti isinya.")
+    if not gab_map:
+        st.info(
+            "File ditemukan tapi tidak ada sheet yang cocok formatnya (butuh header "
+            "SITE dan WILAYAH di baris pertama, minimal 2 outlet per sheet)."
+        )
     else:
-        outlet_names = _horeka_outlet_names()
-        unknown = [c for c in codes if c not in outlet_names]
-        if unknown:
-            st.warning(
-                "Kode berikut tidak ditemukan di data HOREKA saat ini (tetap disimpan, "
-                "tapi periksa lagi -- mungkin salah ketik atau memang belum ada datanya): "
-                + ", ".join(f"`{c}`" for c in unknown)
-            )
-        new_rows = pd.DataFrame([
-            {"Wilayah": wil, "Site": c, "Outlet": outlet_names.get(c, ""), "Group": name}
-            for c in codes
-        ])
-        combined = pd.concat([rows_df, new_rows], ignore_index=True)
-        _save_rows(combined)
-        db.log_action(current["username"], "buat_gabungan_horeka", f"{name} ({wil}): {', '.join(codes)}")
-        st.success(f"Grup '{name}' dibuat dengan {len(codes)} toko.")
-        st.rerun()
+        outlet_names_horeka = os_.build_outlet_index("HOREKA").set_index("Site")["Outlet"].to_dict()
+        for gab_site, g in sorted(gab_map.items(), key=lambda kv: kv[1]["name"]):
+            with st.expander(f"{g['name']} -- {g['wilayah']} -- {len(g['children'])} toko"):
+                st.caption(f"Kode gabungan: `{gab_site}`")
+                rows = [
+                    {"Site": s, "Outlet (data HOREKA saat ini)": outlet_names_horeka.get(s, "(tidak ditemukan)")}
+                    for s in g["children"]
+                ]
+                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
