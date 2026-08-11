@@ -99,7 +99,7 @@ def load_sku_raw(category: str, sku_name: str) -> pd.DataFrame:
 def get_sku_trend(category: str, sku_name: str, site: str) -> dict:
     """KRT per bulan (Jan-Des 2026) untuk satu varian SKU + satu outlet. Gabungan-aware
     lewat resolve_site_list() -- kalau site kode toko gabungan, dijumlah dari anaknya."""
-    site_list = resolve_site_list(site)
+    site_list = resolve_site_list(site, category)
     df = load_sku_raw(category, sku_name)
     match = df[df["Site"].isin(site_list)]
     if match.empty:

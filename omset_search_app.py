@@ -372,7 +372,7 @@ if "last_query" in st.session_state:
         }
         st.markdown(build_html_table(row_cells, cutoffs=brand_cutoffs), unsafe_allow_html=True)
 
-        gabungan_info = load_gabungan_map().get(q_site)
+        gabungan_info = load_gabungan_map(q_type).get(q_site)
         if gabungan_info:
             children = gabungan_info["children"]
             with st.expander(f"Toko yang tergabung ({len(children)})"):

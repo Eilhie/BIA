@@ -266,6 +266,7 @@ def _transpose_progress():
             # transpose ini. Ini titik yang paling tepat buat invalidate.
             omset_seeker.load_brand.cache_clear()
             omset_seeker.load_gabungan_map.cache_clear()
+            omset_seeker.load_horeka_gabungan_map.cache_clear()
             omset_seeker.get_cutoff_parts.cache_clear()
             # sku_lookup.load_sku_raw() jalur cepatnya baca CSV SKU_RAW yang baru saja
             # ditulis ulang oleh transpose.py ini -- titik invalidate utamanya di sini,
