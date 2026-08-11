@@ -25,4 +25,5 @@ pages:
   "pages/7_Detail_SKU_Brand_Besar.py": 5
   "pages/4_Atur_SKU_Sync.py": 5     # edit file SKU_LIST yang kontrol Sync
   "pages/1_Sync_dan_Transpose.py": 5  # jalankan pipeline penuh, tulis ke DB produksi
-  "pages/8_Kelola_User.py": 5         # kelola akun & lihat audit log
+  "pages/8_Kelola_User.py": 5         # kelola akun (level, aktif/nonaktif, password)
+  "pages/9_Audit_Trail.py": 5         # log akses & percobaan login, terpisah dari Kelola User

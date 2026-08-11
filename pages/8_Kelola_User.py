@@ -1,8 +1,8 @@
 """
 KELOLA USER
 Halaman khusus level 5 (Admin) -- buat/ubah akun, atur level akses (0-5),
-nonaktifkan akun, reset password, dan lihat audit trail (siapa buka halaman
-apa, riwayat percobaan login sukses/gagal) untuk keperluan pengawasan akses.
+nonaktifkan akun, reset password. Audit trail (log akses & percobaan login)
+sekarang ada di halaman terpisah, lihat pages/9_Audit_Trail.py.
 """
 
 import pandas as pd
@@ -144,28 +144,4 @@ else:
     st.dataframe(df_users, use_container_width=True, hide_index=True)
 
 st.divider()
-st.subheader("3. Audit trail -- akses halaman")
-
-logs = db.get_logs(limit=300)
-if logs:
-    df_logs = pd.DataFrame(logs, columns=["Waktu", "Username", "Aksi", "Detail"])
-    filter_user = st.text_input("Filter username (kosongkan untuk semua)", key="log_filter_user")
-    view_logs = df_logs
-    if filter_user.strip():
-        view_logs = view_logs[view_logs["Username"].str.contains(filter_user.strip(), case=False, na=False)]
-    st.dataframe(view_logs, use_container_width=True, hide_index=True)
-else:
-    st.info("Belum ada log akses.")
-
-st.divider()
-st.subheader("4. Riwayat percobaan login")
-
-attempts = db.get_login_attempts(limit=300)
-if attempts:
-    df_attempts = pd.DataFrame(attempts, columns=["Waktu", "Username", "Berhasil"])
-    df_attempts["Berhasil"] = df_attempts["Berhasil"].map({1: "Ya", 0: "GAGAL"})
-    only_failed = st.checkbox("Tampilkan yang GAGAL saja", value=False, key="show_failed_only")
-    view_attempts = df_attempts[df_attempts["Berhasil"] == "GAGAL"] if only_failed else df_attempts
-    st.dataframe(view_attempts, use_container_width=True, hide_index=True)
-else:
-    st.info("Belum ada riwayat percobaan login.")
+st.caption("Lihat log akses & riwayat login di halaman **Audit Trail** (menu sebelah).")
