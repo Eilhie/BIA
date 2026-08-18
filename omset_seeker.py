@@ -70,19 +70,45 @@ DIV_AB1_BRAND = "DIV AB1"
 
 def resolve_site_list(site: str, omshar_type: str = "UMUM") -> list[str]:
     """Kalau `site` adalah kode toko gabungan (lihat load_gabungan_map), kembalikan daftar
-    kode site toko anaknya. Kalau bukan, kembalikan [site] apa adanya."""
+    kode site toko anaknya (SEMUA channel dicampur jadi satu list -- dipakai pemanggil
+    yang cuma query SATU channel, mis. sku_lookup.py; anggota dari channel lain di situ
+    otomatis tidak match apa pun, bukan salah, cuma tidak ikut lintas-channel di jalur
+    itu). Kalau bukan gabungan, kembalikan [site] apa adanya."""
     gabungan = load_gabungan_map(omshar_type).get(site)
     return gabungan["children"] if gabungan else [site]
 
 
+def resolve_site_list_by_channel(site: str, omshar_type: str = "UMUM") -> dict:
+    """Return {channel: [site_codes]} -- biasanya cuma {omshar_type: [site]} (site
+    tunggal) atau {omshar_type: [semua anak]} (gabungan biasa, satu channel).
+
+    HOREKA Gabungan mendukung PENGECUALIAN per-outlet lewat kolom CHANNEL opsional
+    di file-nya: kalau satu outlet anggota grup ternyata cuma terdaftar di UMUM
+    (bukan salah ketik, memang begitu adanya di data OMSHAR), ditandai CHANNEL=UMUM
+    di baris itu supaya datanya tetap ikut dijumlah dari channel yang benar -- tanpa
+    ini, outlet itu akan selalu nol di laporan HOREKA (silently), karena dia memang
+    tidak punya baris apa pun di data HOREKA sama sekali."""
+    gabungan = load_gabungan_map(omshar_type).get(site)
+    if not gabungan:
+        return {omshar_type: [site]}
+    by_channel = gabungan.get("children_by_channel")
+    if by_channel:
+        return {ch: sites for ch, sites in by_channel.items() if sites}
+    return {omshar_type: gabungan["children"]}
+
+
 def get_brand_months(brand: str, site: str, omshar_type: str = "UMUM") -> dict:
     """Ambil nilai KRT per bulan untuk satu brand + site (0 semua jika tidak ada).
-    Kalau `site` adalah kode toko gabungan, otomatis dijumlah dari semua toko anaknya --
-    lihat resolve_site_list()."""
-    match = query_brand(brand, resolve_site_list(site, omshar_type), omshar_type)
-    if match.empty:
-        return {m: 0 for m in MONTH_LABELS}
-    return match[MONTH_LABELS].fillna(0).sum().to_dict()
+    Kalau `site` adalah kode toko gabungan, otomatis dijumlah dari semua toko anaknya
+    -- LINTAS CHANNEL kalau ada pengecualian (lihat resolve_site_list_by_channel())."""
+    total = {m: 0.0 for m in MONTH_LABELS}
+    for channel, sites in resolve_site_list_by_channel(site, omshar_type).items():
+        match = query_brand(brand, sites, channel)
+        if not match.empty:
+            summed = match[MONTH_LABELS].fillna(0).sum().to_dict()
+            for m in MONTH_LABELS:
+                total[m] += summed[m]
+    return total
 
 
 def compute_bev(site: str, omshar_type: str = "UMUM") -> dict:
@@ -323,13 +349,28 @@ def _gabungan_from_horeka_workbook(wb) -> dict:
         site_idx = header.index("SITE")
         wilayah_idx = header.index("WILAYAH")
 
+        # Kolom CHANNEL opsional -- pengecualian per-outlet: anggota grup yang
+        # SEBENARNYA cuma terdaftar di channel lain (mis. UMUM), bukan HOREKA
+        # (bukan salah ketik, memang begitu adanya di data OMSHAR mentah).
+        # Tanpa ini outlet itu akan selalu 0 di laporan HOREKA karena dia
+        # memang tidak punya baris apa pun di data HOREKA sama sekali.
+        channel_idx = header.index("CHANNEL") if "CHANNEL" in header else None
+
         sites, wilayah = [], None
+        children_by_channel: dict[str, list[str]] = {}
         for row in rows[1:]:
             if site_idx >= len(row) or not row[site_idx]:
                 continue
-            sites.append(str(row[site_idx]).strip())
+            site_code = str(row[site_idx]).strip()
+            sites.append(site_code)
             if wilayah is None and wilayah_idx < len(row) and row[wilayah_idx]:
                 wilayah = str(row[wilayah_idx]).strip()
+            channel = "HOREKA"
+            if channel_idx is not None and channel_idx < len(row) and row[channel_idx]:
+                override = str(row[channel_idx]).strip().upper()
+                if override in ("UMUM", "HOREKA"):
+                    channel = override
+            children_by_channel.setdefault(channel, []).append(site_code)
         if len(sites) < 2:
             continue
 
@@ -347,7 +388,12 @@ def _gabungan_from_horeka_workbook(wb) -> dict:
         while gab_site in gabungan_map:
             suffix += 1
             gab_site = f"{sites[0]}{suffix}"
-        gabungan_map[gab_site] = {"name": group_name, "wilayah": wilayah or "-", "children": sites}
+        gabungan_map[gab_site] = {
+            "name": group_name,
+            "wilayah": wilayah or "-",
+            "children": sites,
+            "children_by_channel": children_by_channel,
+        }
     return gabungan_map
 
 
@@ -394,17 +440,20 @@ def seek_outlet(site: str, omshar_type: str = "UMUM", brands: list[str] | None =
     brands = brands or BRAND_ORDER
 
     gabungan = load_gabungan_map(omshar_type).get(site)
-    site_list = resolve_site_list(site, omshar_type)
+    channel_sites = resolve_site_list_by_channel(site, omshar_type)
 
     rows = []
     outlet_info = None
 
     for brand in brands:
-        match = query_brand(brand, site_list, omshar_type)
-        if match.empty:
-            row = {m: 0 for m in MONTH_LABELS}
-        else:
-            row = match[MONTH_LABELS].fillna(0).sum().to_dict()
+        row = {m: 0.0 for m in MONTH_LABELS}
+        for channel, sites in channel_sites.items():
+            match = query_brand(brand, sites, channel)
+            if match.empty:
+                continue
+            summed = match[MONTH_LABELS].fillna(0).sum().to_dict()
+            for m in MONTH_LABELS:
+                row[m] += summed[m]
             if outlet_info is None:
                 outlet_info = match.iloc[0][["Wilayah", "Outlet"] + EXTRA_NAMES].to_dict()
                 outlet_info["Site"] = site
