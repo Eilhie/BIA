@@ -18,17 +18,7 @@ import auth
 import database as db
 from omset_seeker import build_outlet_index, get_cutoff_date, load_brand, load_gabungan_map
 from render_outlet_image import (
-    C_CELL_BRAND,
-    C_CELL_RT2_25,
-    C_CELL_RT2_26,
-    C_HEADER_25,
-    C_HEADER_26,
-    C_HEADER_BRAND,
-    C_HEADER_RT2_25,
-    C_HEADER_RT2_26,
-    LABELS_25,
-    LABELS_26,
-    ROW_BG,
+    build_html_table,
     build_report_excel,
     build_report_rows,
     render_outlet_report,
@@ -38,60 +28,6 @@ current_user = auth.require_level(1, page="Omset Seeker")
 st.title("OMSET Seeker")
 
 MAX_LIST_RESULTS = 30
-
-
-def build_html_table(row_cells: list, cutoffs: dict[str, str] | None = None) -> str:
-    """Tabel HTML yang meniru layout & warna OMSET OUTLET Excel/PNG asli:
-    2025 (peach) + RT2 25 (merah) | BRAND (biru muda) | CUT OFF (opsional) |
-    2026 (putih) + RT2 26 (biru tua).
-
-    Kolom CUT OFF cuma tampil di tabel web ini (lewat parameter `cutoffs`),
-    SENGAJA tidak disentuh di render_outlet_image.py sama sekali -- PNG yang
-    dipakai Print/Copy/Excel jadi otomatis TIDAK ikut nampilkan kolom ini tanpa
-    perlu CSS/logic khusus "sembunyikan saat print", karena keduanya memang
-    jalur render yang benar-benar terpisah."""
-    show_cutoff = cutoffs is not None
-    th = lambda text, bg, fg="black": (
-        f'<th style="background:{bg};color:{fg};padding:4px 8px;white-space:nowrap;'
-        f'border:1px solid #999;">{text}</th>'
-    )
-    header = "<tr>"
-    header += "".join(th(c, C_HEADER_25) for c in LABELS_25)
-    header += th("RT2 25", C_HEADER_RT2_25, "white")
-    header += th("BRAND", C_HEADER_BRAND)
-    if show_cutoff:
-        header += th("CUT OFF", C_HEADER_BRAND)
-    header += "".join(th(c, C_HEADER_26) for c in LABELS_26)
-    header += th("RT2 26", C_HEADER_RT2_26, "white")
-    header += "</tr>"
-
-    body_rows = []
-    for vals_25, rt2_25, label, vals_26, rt2_26, row_type in row_cells:
-        bg = ROW_BG[row_type]
-        fg = "white" if row_type == "divab1" else "black"
-        td = lambda text, cell_bg, align="right", bold=False: (
-            f'<td style="background:{cell_bg};color:{fg};padding:4px 8px;text-align:{align};'
-            f'border:1px solid #ccc;{"font-weight:bold;" if bold else ""}white-space:nowrap;">{text}</td>'
-        )
-        row = "<tr>"
-        row += "".join(td(v, bg) for v in vals_25)
-        row += td(rt2_25, bg if row_type != "normal" else C_CELL_RT2_25, bold=True)
-        row += td(label, bg if row_type != "normal" else C_CELL_BRAND, align="left", bold=True)
-        if show_cutoff:
-            row += td(cutoffs.get(label, "") or "-", bg, align="center")
-        row += "".join(td(v, bg) for v in vals_26)
-        row += td(rt2_26, bg if row_type != "normal" else C_CELL_RT2_26, bold=True)
-        row += "</tr>"
-        body_rows.append(row)
-
-    return f"""
-    <div style="overflow-x:auto; border:1px solid #999; border-radius:4px;">
-      <table style="border-collapse:collapse; font-size:0.8rem; width:100%;">
-        <thead>{header}</thead>
-        <tbody>{"".join(body_rows)}</tbody>
-      </table>
-    </div>
-    """
 
 
 @st.cache_data(show_spinner=False, ttl="10m")

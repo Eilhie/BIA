@@ -20,6 +20,7 @@ import xlrd
 from omset_pipeline.transpose import (
     DAPUL, LAPUL, HOREKA, HEADER_ROWS, COL_SITE, CSV_DIR,
     UMUM_FILE, HOREKA_FILE, HOREKA_KEG_FILE, stack_sheets,
+    COLS_2025, MONTH_LABELS_2025, COLS_2026, MONTH_LABELS_2026,
 )
 from omset_seeker import resolve_site_list
 
@@ -29,15 +30,9 @@ OMSHAR_DIR = Path(r"D:\DB OMSHAR\DB")
 
 WILAYAH_ORDER = {"UMUM": DAPUL + LAPUL, "HOREKA": HOREKA}
 
-# Kolom KRT 2026 saja (0-indexed, xlrd) -- lihat project-omshar-technical:
-# 2025=140-151, 2026=152-163.
-COLS_2026 = list(range(152, 164))
-MONTH_LABELS_2026 = [
-    f"{m} 2026"
-    for m in ["JAN", "FEB", "MAR", "APR", "MEI", "JUN", "JUL", "AGS", "SEP", "OKT", "NOV", "DES"]
-]
+MONTH_LABELS_ALL = MONTH_LABELS_2025 + MONTH_LABELS_2026
 
-_EMPTY_TREND = {m: 0 for m in MONTH_LABELS_2026}
+_EMPTY_TREND = {m: 0 for m in MONTH_LABELS_ALL}
 
 
 def get_sku_catalog(category: str) -> dict[str, list[str]]:
@@ -59,24 +54,29 @@ def _sku_raw_cache_path(category: str, sku_name: str) -> Path:
 
 @lru_cache(maxsize=None)
 def load_sku_raw(category: str, sku_name: str) -> pd.DataFrame:
-    """Site + KRT 2026 untuk satu varian SKU individu.
+    """Site + KRT 2025 & 2026 untuk satu varian SKU individu.
 
     Jalur cepat: baca CSV ringan yang sudah disiapkan transpose.py lewat
     write_sku_raw_csv() -- numpang di parsing yang SUDAH dilakukan pipeline transpose,
     jadi baca-nya milidetik, bukan ~20 detik/file. Fallback ke baca .xls mentah
-    langsung kalau CSV itu belum ada (mis. SKU baru yang belum pernah ditranspose
-    sejak fitur ini ada, atau setelah Sync tapi sebelum Transpose jalan)."""
+    langsung kalau CSV itu belum ada, ATAU kalau CSV-nya format LAMA (cuma kolom
+    2026 -- dari sebelum SKU_RAW diperluas ikut 2025, belum di-retranspose) --
+    tanpa cek ini, SKU yang cache-nya masih format lama akan diam-diam kehilangan
+    kolom 2025 (RT2 25 jadi 0 semua) alih-alih baca ulang yang lebih lambat tapi benar."""
     cached = _sku_raw_cache_path(category, sku_name)
     if cached.exists():
         out = pd.read_csv(cached, dtype={"Site": str}, encoding="utf-8-sig")
-        out["Site"] = out["Site"].str.strip()
-        for m in MONTH_LABELS_2026:
-            out[m] = pd.to_numeric(out[m], errors="coerce").fillna(0)
-        return out
+        if all(m in out.columns for m in MONTH_LABELS_ALL):
+            out["Site"] = out["Site"].str.strip()
+            for m in MONTH_LABELS_ALL:
+                out[m] = pd.to_numeric(out[m], errors="coerce").fillna(0)
+            return out
+        # cache format lama (cuma 2026) -- lanjut ke fallback raw di bawah, JANGAN
+        # diam-diam kembalikan data 2025 kosong.
 
     src = OMSHAR_DIR / f"OMSHAR {category} {sku_name}.xls"
     if not src.exists():
-        return pd.DataFrame(columns=["Site"] + MONTH_LABELS_2026)
+        return pd.DataFrame(columns=["Site"] + MONTH_LABELS_ALL)
 
     wb = xlrd.open_workbook(str(src), on_demand=True)
     try:
@@ -85,23 +85,24 @@ def load_sku_raw(category: str, sku_name: str) -> pd.DataFrame:
         wb.release_resources()
 
     if not rows:
-        return pd.DataFrame(columns=["Site"] + MONTH_LABELS_2026)
+        return pd.DataFrame(columns=["Site"] + MONTH_LABELS_ALL)
 
     df = pd.DataFrame(rows)
-    out = df[[COL_SITE] + COLS_2026].copy()
-    out.columns = ["Site"] + MONTH_LABELS_2026
+    out = df[[COL_SITE] + COLS_2025 + COLS_2026].copy()
+    out.columns = ["Site"] + MONTH_LABELS_ALL
     out["Site"] = out["Site"].astype(str).str.strip()
-    for m in MONTH_LABELS_2026:
+    for m in MONTH_LABELS_ALL:
         out[m] = pd.to_numeric(out[m], errors="coerce").fillna(0)
     return out
 
 
 def get_sku_trend(category: str, sku_name: str, site: str) -> dict:
-    """KRT per bulan (Jan-Des 2026) untuk satu varian SKU + satu outlet. Gabungan-aware
-    lewat resolve_site_list() -- kalau site kode toko gabungan, dijumlah dari anaknya."""
+    """KRT per bulan (Jan 2025 - Des 2026) untuk satu varian SKU + satu outlet.
+    Gabungan-aware lewat resolve_site_list() -- kalau site kode toko gabungan,
+    dijumlah dari anaknya."""
     site_list = resolve_site_list(site, category)
     df = load_sku_raw(category, sku_name)
     match = df[df["Site"].isin(site_list)]
     if match.empty:
         return dict(_EMPTY_TREND)
-    return match[MONTH_LABELS_2026].sum().to_dict()
+    return match[MONTH_LABELS_ALL].sum().to_dict()

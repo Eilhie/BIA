@@ -79,10 +79,15 @@ with tab_manual:
             outlets_idx = get_outlet_index(category).set_index("Site")
             rows = []
             for site in selected_sites:
+                # get_sku_trend() sekarang balikin 2025+2026 (buat Detail SKU Brand
+                # Besar) -- halaman ini SENGAJA cuma tampilkan 2026 (lihat caption di
+                # atas), jadi disaring ke MONTHS di sini supaya Total & kolom yang
+                # ditampilkan tidak diam-diam ikut kebawa data 2025.
                 trend = sku_lookup.get_sku_trend(category, sku_name, site)
+                trend_2026 = {m: trend[m] for m in MONTHS}
                 name = outlets_idx["Outlet"].get(site, "(tidak diketahui)")
-                row = {"Site": site, "Outlet": name, **trend}
-                row["Total"] = sum(trend.values())
+                row = {"Site": site, "Outlet": name, **trend_2026}
+                row["Total"] = sum(trend_2026.values())
                 rows.append(row)
             result_df = pd.DataFrame(rows)
 
@@ -150,10 +155,12 @@ with tab_batch:
                     rows = []
                     for _, r in batch_in.iterrows():
                         site, sku = r["Site"], r["SKU"]
+                        # Sama seperti tab Cari Manual -- disaring ke MONTHS (2026 saja).
                         trend = sku_lookup.get_sku_trend(batch_category, sku, site)
+                        trend_2026 = {m: trend[m] for m in MONTHS}
                         name = outlets_idx["Outlet"].get(site, "(site tidak ditemukan)")
-                        row = {"Site": site, "Outlet": name, "SKU": sku, **trend}
-                        row["Total"] = sum(trend.values())
+                        row = {"Site": site, "Outlet": name, "SKU": sku, **trend_2026}
+                        row["Total"] = sum(trend_2026.values())
                         rows.append(row)
                     result_df = pd.DataFrame(rows)
 
