@@ -334,7 +334,19 @@ def _gabungan_from_horeka_workbook(wb) -> dict:
             continue
 
         group_name = ws.title.strip()
-        gab_site = f"{sites[0]}1"
+        # Kode sintetis = toko pertama + angka -- BUKAN selalu '1' seperti UMUM (yang
+        # formatnya warisan VLOOKUP asli, jangan diubah supaya tetap cocok kalau ada
+        # sistem lain yang bergantung padanya). HOREKA murni bikinan sendiri, jadi bebas
+        # dibikin lebih aman: kalau dua grup beda kebetulan sama-sama diawali toko yang
+        # sama (kejadian nyata: sheet gabungan besar + sheet pecahannya per wilayah,
+        # sama-sama mulai dari toko yang sama), tanpa penomoran ini grup KEDUA akan diam-
+        # diam menimpa yang pertama di dict (kunci sama) -- salah satu grup lenyap tanpa
+        # pesan error apa pun.
+        suffix = 1
+        gab_site = f"{sites[0]}{suffix}"
+        while gab_site in gabungan_map:
+            suffix += 1
+            gab_site = f"{sites[0]}{suffix}"
         gabungan_map[gab_site] = {"name": group_name, "wilayah": wilayah or "-", "children": sites}
     return gabungan_map
 
