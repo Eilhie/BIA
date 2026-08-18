@@ -2,7 +2,9 @@
 DETAIL SKU BRAND BESAR
 Laporan detail per outlet untuk brand-brand besar (PALS, PLAG, PPIL, PRL, WBR,
 SINGARAJA, SOMAEK) -- dipecah sampai ke level varian SKU individual (botol/
-kaleng/pint/keg dsb), bukan cuma total brand seperti di Omset Seeker.
+kaleng/pint/keg dsb), bukan cuma total brand seperti di Omset Seeker. Tabelnya
+sendiri format PERSIS Omset Seeker (2025 + RT2 25 | BRAND | 2026 + RT2 26,
+warna sama) -- satu baris per varian SKU, bukan per brand gabungan.
 
 PENTING: sebagian besar kode varian di sini TIDAK pernah tersentuh transpose.py
 (itu cuma proses SKU yang terdaftar di UMUM_FILE/HOREKA_FILE, sebagian besar
@@ -23,13 +25,14 @@ import streamlit as st
 import auth
 import omset_seeker as os_
 import sku_lookup as sl
+from render_outlet_image import build_html_table, build_row_cells
 
 auth.require_level(5, page="Detail SKU Brand Besar")
 st.title("Detail SKU Brand Besar")
 st.caption(
     "Pecahan varian SKU individual untuk brand-brand besar -- PALS, PLAG, PPIL, "
-    "PRL, WBR, SINGARAJA, SOMAEK -- trend Jan-Des 2026 per outlet. Laporan Omset "
-    "Seeker yang biasa cuma tampilkan total brand-nya, bukan pecahan tiap varian."
+    "PRL, WBR, SINGARAJA, SOMAEK -- format tabel persis Omset Seeker (2025 + RT2 25 "
+    "| BRAND | 2026 + RT2 26), tapi satu baris per VARIAN SKU, bukan per total brand."
 )
 
 # Grup SKU_LIST yang jadi sumber daftar varian tiap brand besar -- dibaca
@@ -65,9 +68,20 @@ def _all_skus(category: str) -> list[tuple[str, str]]:
 
 
 def _is_fast(category: str, sku: str) -> bool:
-    """True kalau SKU ini sudah punya cache SKU_RAW (dari Transpose) -- kalau
-    tidak, get_sku_trend() bakal jatuh ke baca .xls mentah (~20-25 detik)."""
-    return sl._sku_raw_cache_path(category, sku).exists()
+    """True kalau SKU ini sudah punya cache SKU_RAW LENGKAP (2025+2026, dari
+    Transpose versi terbaru) -- kalau tidak, get_sku_trend() jatuh ke baca .xls
+    mentah (~20-25 detik). File cache format LAMA (cuma 2026, dari sebelum SKU_RAW
+    diperluas) SENGAJA dihitung 'belum cepat' di sini -- load_sku_raw() sendiri
+    juga akan fallback ke raw kalau ketemu cache format lama, jadi estimasi waktu
+    di halaman ini tetap akurat, bukan optimis palsu."""
+    path = sl._sku_raw_cache_path(category, sku)
+    if not path.exists():
+        return False
+    try:
+        cols = pd.read_csv(path, nrows=0, encoding="utf-8-sig").columns
+        return all(m in cols for m in sl.MONTH_LABELS_ALL)
+    except Exception:
+        return False
 
 
 @st.cache_data(show_spinner=False, ttl="10m")
@@ -112,8 +126,9 @@ if site:
         est_min = len(slow_skus) * 22 / 60
         st.caption(
             f"{len(fast_skus)}/{len(all_skus)} varian SKU sudah punya cache cepat (langsung tampil di "
-            f"bawah). {len(slow_skus)} varian lain belum pernah di-Transpose -- baca langsung dari "
-            f".xls mentah kira-kira **~{est_min:.0f} menit** kalau disertakan (centang di bawah)."
+            f"bawah). {len(slow_skus)} varian lain belum pernah di-Transpose (atau cache-nya masih "
+            f"format lama, belum ikut 2025) -- baca langsung dari .xls mentah kira-kira "
+            f"**~{est_min:.0f} menit** kalau disertakan (centang di bawah)."
         )
         include_slow = st.checkbox(
             f"Sertakan {len(slow_skus)} varian yang belum ke-cache (lambat, ~{est_min:.0f} menit)",
@@ -124,34 +139,56 @@ if site:
 
     todo = fast_skus + (slow_skus if include_slow else [])
 
-    rows = []
+    # cutoff_parts dari kategori ini -- bulan 2026 yang sudah genap tutup buku,
+    # persis logika RT2 26 di Omset Seeker (build_report_rows()), supaya rata-rata
+    # RT2 26 di sini tidak ikut kebagi bulan yang belum jalan sama sekali.
+    cutoff_parts = os_.get_cutoff_parts(omshar_type=category)
+    months_26_closed = (cutoff_parts[1] - 1) if cutoff_parts else 12
+
+    trends = {}
     progress = st.progress(0.0, text=f"Memuat 0/{len(todo)} varian SKU...") if slow_skus and include_slow else None
     t0 = time.time()
     for i, (label, sku) in enumerate(todo):
-        trend = sl.get_sku_trend(category, sku, site)
-        total = sum(trend.values())
-        rows.append({"Brand": label, "SKU": sku, **trend, "Total": total})
+        trends[(label, sku)] = sl.get_sku_trend(category, sku, site)
         if progress is not None:
             progress.progress((i + 1) / len(todo), text=f"Memuat {i + 1}/{len(todo)} varian SKU...")
     if progress is not None:
         progress.empty()
         st.caption(f"Selesai dalam {time.time() - t0:.0f} detik.")
 
-    if not rows:
+    if not trends:
         st.info("Tidak ada data SKU untuk brand-brand ini di kategori ini.")
     else:
-        df = pd.DataFrame(rows)
         only_active = st.checkbox("Tampilkan yang ada penjualan saja (Total > 0)", value=True, key="detail_only_active")
-        view = df[df["Total"] > 0] if only_active else df
-        st.caption(f"{len(view)} varian SKU ditampilkan (dari {len(df)} yang dimuat, {len(all_skus)} total di 7 brand ini).")
-        st.dataframe(view, use_container_width=True, hide_index=True)
 
-        buf = io.BytesIO()
-        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-            view.to_excel(writer, index=False, sheet_name="Detail SKU")
-        st.download_button(
-            "Download Excel",
-            data=buf.getvalue(),
-            file_name=f"Detail SKU Brand Besar - {site}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        row_cells = []
+        excel_rows = []
+        for (label, sku), trend in trends.items():
+            total = sum(trend.values())
+            if only_active and total <= 0:
+                continue
+            vals_25, rt2_25, vals_26, rt2_26 = build_row_cells(trend, months_26_closed)
+            row_label = f"{label} -- {sku}"
+            row_cells.append((vals_25, rt2_25, row_label, vals_26, rt2_26, "normal"))
+            excel_rows.append({"Brand": label, "SKU": sku, **trend, "Total": total})
+
+        st.caption(
+            f"{len(row_cells)} varian SKU ditampilkan (dari {len(trends)} yang dimuat, "
+            f"{len(all_skus)} total di 7 brand ini)."
         )
+
+        if not row_cells:
+            st.info("Tidak ada varian dengan penjualan (Total > 0) untuk ditampilkan -- coba matikan filter di atas.")
+        else:
+            st.markdown(build_html_table(row_cells), unsafe_allow_html=True)
+
+            buf = io.BytesIO()
+            excel_df = pd.DataFrame(excel_rows)
+            with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+                excel_df.to_excel(writer, index=False, sheet_name="Detail SKU")
+            st.download_button(
+                "Download Excel",
+                data=buf.getvalue(),
+                file_name=f"Detail SKU Brand Besar - {site}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )

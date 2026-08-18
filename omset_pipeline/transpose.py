@@ -48,14 +48,16 @@ HEADER_ROWS = 8  # baris 1-8 = judul/wilayah/periode/grup + header kolom
 COL_SITE = 1
 OMSET_COLS = list(range(140, 164))  # EK:FH = JAN 2025 - DES 2026, dipakai saat gabung multi-file per brand
 
-# Kolom KRT 2026 saja -- dipakai buat output "SKU_RAW" (lihat _write_sku_raw_csv()),
+# Kolom KRT 2025 & 2026 -- dipakai buat output "SKU_RAW" (lihat write_sku_raw_csv()),
 # cache per VARIAN SKU individu (bukan per brand gabungan) buat sku_lookup.py supaya
-# tidak perlu buka ulang file .xls mentah (~20 detik/file) tiap kali ada query.
+# tidak perlu buka ulang file .xls mentah (~20 detik/file) tiap kali ada query. Dua
+# tahun sekaligus (bukan cuma 2026) supaya Detail SKU Brand Besar bisa tampilkan
+# RT2 25/RT2 26 persis format Omset Seeker, bukan cuma trend 2026 saja.
+_MONTHS_ID = ["JAN", "FEB", "MAR", "APR", "MEI", "JUN", "JUL", "AGS", "SEP", "OKT", "NOV", "DES"]
+COLS_2025 = list(range(140, 152))
+MONTH_LABELS_2025 = [f"{m} 2025" for m in _MONTHS_ID]
 COLS_2026 = list(range(152, 164))
-MONTH_LABELS_2026 = [
-    f"{m} 2026"
-    for m in ["JAN", "FEB", "MAR", "APR", "MEI", "JUN", "JUL", "AGS", "SEP", "OKT", "NOV", "DES"]
-]
+MONTH_LABELS_2026 = [f"{m} 2026" for m in _MONTHS_ID]
 
 # 19 SKU + BIR (total kategori) + DIV AB1 (total divisi, paling luas).
 # "BEV" TIDAK ditranspose dari file apa pun -- itu dihitung di omset_seeker.py
@@ -349,20 +351,21 @@ def save_csv_dual(xlsx_path: Path, csv_subdir: Path):
 
 
 # ── SKU RAW CACHE ─────────────────────────────────────────────────────────────
-# CSV ringan (Site + 12 bulan 2026 saja) per VARIAN SKU individu -- ditulis dari
-# `rows` yang SUDAH ada di memori dari stack_sheets() di process_brand(), jadi
-# tidak ada biaya buka file tambahan. Konsumen: sku_lookup.py (cek klaim per SKU).
+# CSV ringan (Site + 12 bulan 2025 + 12 bulan 2026) per VARIAN SKU individu --
+# ditulis dari `rows` yang SUDAH ada di memori dari stack_sheets() di
+# process_brand(), jadi tidak ada biaya buka file tambahan. Konsumen:
+# sku_lookup.py (cek klaim per SKU, Detail SKU Brand Besar).
 
 def write_sku_raw_csv(omshar_type: str, file_name: str, rows: list, out_subdir: str) -> None:
     if not rows:
         return
     df = pd.DataFrame(rows)
-    needed = [COL_SITE] + COLS_2026
+    needed = [COL_SITE] + COLS_2025 + COLS_2026
     if df.shape[1] <= max(needed):
         print(f"  [WARN] SKU_RAW {file_name}: kolom tidak lengkap, di-skip")
         return
     out = df[needed].copy()
-    out.columns = ["Site"] + MONTH_LABELS_2026
+    out.columns = ["Site"] + MONTH_LABELS_2025 + MONTH_LABELS_2026
     out["Site"] = out["Site"].astype(str).str.strip()
 
     out_dir = CSV_DIR / out_subdir / "SKU_RAW"
