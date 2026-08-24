@@ -153,6 +153,60 @@ def current_month_key(today: datetime.date | None = None) -> str:
     return f"{_MONTH_ABBR_ID[d.month]}{d.year % 100:02d}"
 
 
+def sync_current_month_from_omshar(category: str) -> dict:
+    """Isi/perbarui kolom bulan berjalan di archive LANGSUNG dari OMSHAR (data
+    sell-in kita sendiri, selalu fresh mengikuti Sync & Transpose) -- tidak perlu
+    nunggu RAW dari divisi lain, yang biasanya baru bawa bulan berjalan beberapa
+    minggu kemudian. HANYA kolom bulan berjalan yang disentuh dari sini;
+    Strata/Lapisan/kompetitor (MUSUH) TETAP murni titipan RAW -- itu angka brand
+    kompetitor, sama sekali tidak ada di data OMSHAR kita.
+
+    Aman dipanggil tiap rerun halaman: load_brand() sendiri sudah di-cache
+    (parquet + lru_cache di omset_seeker.py) jadi baca datanya murah, dan archive
+    cuma benar-benar ditulis ulang ke disk kalau kolom bulan berjalannya memang
+    berubah nilai dari yang sudah tersimpan -- bukan tiap rerun."""
+    import omset_seeker as os_  # lazy import -- modul lain yang pakai mclub_pipeline tidak selalu butuh ini
+
+    month_key = current_month_key()
+    omshar_label = f"{month_key[:3]} 20{month_key[3:]}"
+
+    bir = os_.load_brand("BIR", category)
+    if bir.empty or omshar_label not in bir.columns:
+        return {"pulled": False, "month": month_key}
+
+    # Beberapa kode site di OMSHAR mentah muncul >1 baris (data quality di sumbernya,
+    # bukan bug di sini) -- jumlahkan per Site, konsisten dengan cara query_brand()
+    # di omset_seeker.py menjumlahkan baris yang cocok, supaya tidak crash pas
+    # merge_into_archive() index-nya harus unik.
+    pulled = (
+        bir[["Site", omshar_label]]
+        .assign(Site=bir["Site"].astype(str))
+        .rename(columns={omshar_label: month_key})
+        .groupby("Site", as_index=False)[month_key].sum()
+    )
+    pulled[month_key] = pulled[month_key].fillna(0)
+
+    archive = load_archive(category)
+    if archive.empty or "Site" not in archive.columns:
+        return {"pulled": False, "month": month_key}
+
+    # HANYA update outlet yang SUDAH ada di archive -- OMSHAR punya puluhan ribu
+    # site yang bukan bagian dari roster Gold/Platinum/MCLUB sama sekali (roster-nya
+    # murni ditentukan RAW dari divisi lain), jadi TIDAK boleh nambah baris baru
+    # dari sini, cuma nyegerin kolom bulan berjalan punya outlet yang sudah ditrack.
+    pulled = pulled[pulled["Site"].isin(archive["Site"])]
+    merged = merge_into_archive(archive, pulled)
+
+    old_col = archive.set_index("Site")[month_key] if month_key in archive.columns else None
+    new_col = merged.set_index("Site")[month_key]
+    changed = old_col is None or not old_col.reindex(new_col.index).fillna(0).equals(new_col.fillna(0))
+
+    if changed:
+        save_archive(merged, category)
+
+    return {"pulled": True, "changed": changed, "month": month_key, "rows": len(pulled)}
+
+
 def _atomic_write_csv(df: pd.DataFrame, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")

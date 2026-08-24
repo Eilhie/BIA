@@ -147,6 +147,15 @@ else:
     mtime_str = pd.Timestamp(raw_status["mtime"], unit="s").strftime("%d %b %Y %H:%M")
     st.caption(f"Sudah up to date -- RAW terakhir: `{raw_status['file'].name}` ({mtime_str}).")
 
+with st.spinner("Menyinkronkan bulan berjalan dari OMSHAR..."):
+    omshar_status = mp.sync_current_month_from_omshar(category)
+if omshar_status.get("pulled"):
+    src = "diperbarui" if omshar_status.get("changed") else "sudah sama"
+    st.caption(
+        f"Kolom bulan berjalan (**{omshar_status['month']}**) ditarik langsung dari OMSHAR -- {src}, "
+        "tidak perlu nunggu RAW turun untuk bulan ini."
+    )
+
 st.divider()
 st.subheader("3. Lihat & cari hasil")
 
