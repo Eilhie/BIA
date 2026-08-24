@@ -8,6 +8,10 @@ angkanya diam-diam basi). Halaman ini baca raw file harian LANGSUNG
 otomatis yang paling baru) dan hitung ulang dari nol tiap dibuka -- tidak
 pernah kena masalah lupa relink.
 
+Tampilan + warna kolom (DATA kuning, PROPOSED ORDER hijau/oranye, TOTAL
+merah, ACTUAL ORDER/% gelap) meniru PERSIS template Excel asli -- lihat
+render_bpr.py. Export Excel & PDF juga sama persis warnanya.
+
 Catatan: sheet 'Rekap Per WILAYAH' di template asli punya satu kolom
 tambahan (F, tanpa header) yang formulanya salah-referensi (AVERAGEIFS
 DOI per-Depo dari sheet lain, dicocokkan lewat NOMOR BARIS bukan nama
@@ -20,8 +24,7 @@ import streamlit as st
 
 import auth
 import bpr_pipeline as bp
-
-BRAND_COLS = bp.BRAND_COLUMNS
+import render_bpr as rb
 
 
 @st.cache_data(show_spinner=False, ttl="10m")
@@ -33,32 +36,6 @@ def get_rekap() -> tuple[pd.DataFrame, pd.DataFrame, str] | None:
     depo = bp.compute_rekap_depo(raw)
     wilayah = bp.compute_rekap_wilayah(raw, depo)
     return depo, wilayah, path.name
-
-
-def _fmt_num(v, decimals=0) -> str:
-    if pd.isna(v):
-        return "-"
-    return f"{v:,.{decimals}f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-
-def _fmt_pct(v) -> str:
-    if pd.isna(v):
-        return "-"
-    return f"{v * 100:.1f}".replace(".", ",") + "%"
-
-
-def _style_table(df: pd.DataFrame, index_cols: list[str]) -> pd.io.formats.style.Styler:
-    disp = df.copy()
-    for c in ["NORM"] + BRAND_COLS + ["TOTAL", "ACTUAL ORDER"]:
-        if c in disp.columns:
-            disp[c] = disp[c].apply(lambda v: _fmt_num(v, 0))
-    if "STOK" in disp.columns:
-        disp["STOK"] = disp["STOK"].apply(lambda v: _fmt_num(v, 2))
-    if "DOI" in disp.columns:
-        disp["DOI"] = disp["DOI"].apply(lambda v: _fmt_num(v, 1))
-    if "%" in disp.columns:
-        disp["%"] = disp["%"].apply(_fmt_pct)
-    return disp
 
 
 auth.require_level(5, page="BPR")
@@ -77,17 +54,37 @@ if result is None:
     st.stop()
 
 depo_df, wilayah_df, source_name = result
+source_label = f"Sumber: {source_name}"
 st.caption(f"File yang dibaca: `{source_name}`")
+
+col_xlsx, col_pdf = st.columns(2)
+with col_xlsx:
+    st.download_button(
+        "Download Excel",
+        data=rb.build_excel_bytes(depo_df, wilayah_df, source_label),
+        file_name=f"BPR BIA - {source_name.replace('.xls', '')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+with col_pdf:
+    if rb.MATPLOTLIB_AVAILABLE:
+        st.download_button(
+            "Download PDF",
+            data=rb.build_pdf_bytes(depo_df, wilayah_df, source_label),
+            file_name=f"BPR BIA - {source_name.replace('.xls', '')}.pdf",
+            mime="application/pdf",
+        )
+    else:
+        st.caption("PDF tidak tersedia -- matplotlib gagal dimuat.")
 
 tab_depo, tab_wilayah = st.tabs(["Rekap Per Depo", "Rekap Per Wilayah"])
 
 with tab_depo:
     st.caption(f"{len(depo_df) - 1} depo (baris terakhir = TOTAL semua depo).")
-    st.dataframe(_style_table(depo_df, ["Wilayah", "Depo"]), use_container_width=True, hide_index=True)
+    st.markdown(rb.build_html_table(depo_df, "Rekap Per Depo"), unsafe_allow_html=True)
 
 with tab_wilayah:
     st.caption(
         "6 region (DKI/Banten/Bodebek/Jatim Utara/Jatim Selatan/Bali) x UMUM/HOREKA + baris subtotal "
         "REGION TOTAL -- cakupan sama seperti template asli, bukan seluruh wilayah perusahaan."
     )
-    st.dataframe(_style_table(wilayah_df, ["Wilayah"]), use_container_width=True, hide_index=True)
+    st.markdown(rb.build_html_table(wilayah_df, "Rekap Per Wilayah"), unsafe_allow_html=True)
