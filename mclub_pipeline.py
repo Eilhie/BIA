@@ -190,6 +190,21 @@ def sync_current_month_from_omshar(category: str) -> dict:
     if archive.empty or "Site" not in archive.columns:
         return {"pulled": False, "month": month_key}
 
+    # Site "Gabungan" (mis. "...GABUNGAN" -- kode sintetis, tidak pernah ada di
+    # data OMSHAR mentah sama sekali, lihat omset_seeker.load_gabungan_map())
+    # TIDAK ketangkap oleh lookup langsung di atas -- harus di-resolve satu-satu
+    # lewat get_brand_months() (otomatis jumlah dari semua toko anak, termasuk
+    # pengecualian lintas-channel HOREKA). Jumlahnya kecil (puluhan-ratusan grup),
+    # jadi aman dilakukan satu-satu, bukan bottleneck.
+    gabungan_sites = set(os_.load_gabungan_map(category).keys())
+    archive_gabungan = [s for s in archive["Site"].astype(str) if s in gabungan_sites]
+    if archive_gabungan:
+        gab_rows = [
+            {"Site": s, month_key: os_.get_brand_months("BIR", s, category).get(omshar_label, 0)}
+            for s in archive_gabungan
+        ]
+        pulled = pd.concat([pulled, pd.DataFrame(gab_rows)], ignore_index=True)
+
     # HANYA update outlet yang SUDAH ada di archive -- OMSHAR punya puluhan ribu
     # site yang bukan bagian dari roster Gold/Platinum/MCLUB sama sekali (roster-nya
     # murni ditentukan RAW dari divisi lain), jadi TIDAK boleh nambah baris baru
