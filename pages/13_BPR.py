@@ -54,14 +54,14 @@ if result is None:
     st.stop()
 
 depo_df, wilayah_df, source_name = result
-source_label = f"Sumber: {source_name}"
-st.caption(f"File yang dibaca: `{source_name}`")
+update_label = rb.format_update_label(source_name)
+st.caption(f"File yang dibaca: `{source_name}` -- {update_label}")
 
 col_xlsx, col_pdf = st.columns(2)
 with col_xlsx:
     st.download_button(
         "Download Excel",
-        data=rb.build_excel_bytes(depo_df, wilayah_df, source_label),
+        data=rb.build_excel_bytes(depo_df, wilayah_df, update_label),
         file_name=f"BPR BIA - {source_name.replace('.xls', '')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
@@ -69,7 +69,7 @@ with col_pdf:
     if rb.MATPLOTLIB_AVAILABLE:
         st.download_button(
             "Download PDF",
-            data=rb.build_pdf_bytes(depo_df, wilayah_df, source_label),
+            data=rb.build_pdf_bytes(depo_df, wilayah_df, update_label),
             file_name=f"BPR BIA - {source_name.replace('.xls', '')}.pdf",
             mime="application/pdf",
         )
@@ -80,11 +80,11 @@ tab_depo, tab_wilayah = st.tabs(["Rekap Per Depo", "Rekap Per Wilayah"])
 
 with tab_depo:
     st.caption(f"{len(depo_df) - 1} depo (baris terakhir = TOTAL semua depo).")
-    st.markdown(rb.build_html_table(depo_df, "Rekap Per Depo"), unsafe_allow_html=True)
+    st.markdown(rb.build_html_table(depo_df, "Rekap Per Depo", update_label), unsafe_allow_html=True)
 
 with tab_wilayah:
     st.caption(
         "6 region (DKI/Banten/Bodebek/Jatim Utara/Jatim Selatan/Bali) x UMUM/HOREKA + baris subtotal "
         "REGION TOTAL -- cakupan sama seperti template asli, bukan seluruh wilayah perusahaan."
     )
-    st.markdown(rb.build_html_table(wilayah_df, "Rekap Per Wilayah"), unsafe_allow_html=True)
+    st.markdown(rb.build_html_table(wilayah_df, "Rekap Per Wilayah", update_label), unsafe_allow_html=True)
