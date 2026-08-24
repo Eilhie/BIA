@@ -140,16 +140,22 @@ def build_html_table(row_cells: list, cutoffs: dict[str, str] | None = None) -> 
     render_outlet_report() (PNG) sama sekali, jadi PNG yang dipakai Print/Copy/
     Excel otomatis TIDAK ikut nampilkan kolom ini tanpa perlu CSS/logic khusus
     "sembunyikan saat print", karena keduanya memang jalur render yang benar-benar
-    terpisah."""
+    terpisah.
+
+    Kolom BRAND di-freeze (position:sticky) ke tepi kiri area scroll -- tabelnya
+    lebar (26 kolom), dan BRAND ada di posisi ke-14 (setelah 2025+RT2 25), jadi
+    tanpa ini nama brand-nya ilang duluan begitu discroll ke kanan, terutama di
+    tempat sempit kayak modal (lihat pages/5_Outlet_Lapisan_MClub.py)."""
     show_cutoff = cutoffs is not None
-    th = lambda text, bg, fg="black": (
+    STICKY = "position:sticky;left:0;z-index:2;box-shadow:2px 0 3px -1px rgba(0,0,0,0.3);"
+    th = lambda text, bg, fg="black", extra="": (
         f'<th style="background:{bg};color:{fg};padding:4px 8px;white-space:nowrap;'
-        f'border:1px solid #999;">{text}</th>'
+        f'border:1px solid #999;{extra}">{text}</th>'
     )
     header = "<tr>"
     header += "".join(th(c, C_HEADER_25) for c in LABELS_25)
     header += th("RT2 25", C_HEADER_RT2_25, "white")
-    header += th("BRAND", C_HEADER_BRAND)
+    header += th("BRAND", C_HEADER_BRAND, extra=STICKY)
     if show_cutoff:
         header += th("CUT OFF", C_HEADER_BRAND)
     header += "".join(th(c, C_HEADER_26) for c in LABELS_26)
@@ -160,14 +166,14 @@ def build_html_table(row_cells: list, cutoffs: dict[str, str] | None = None) -> 
     for vals_25, rt2_25, label, vals_26, rt2_26, row_type in row_cells:
         bg = ROW_BG[row_type]
         fg = "white" if row_type == "divab1" else "black"
-        td = lambda text, cell_bg, align="right", bold=False: (
+        td = lambda text, cell_bg, align="right", bold=False, extra="": (
             f'<td style="background:{cell_bg};color:{fg};padding:4px 8px;text-align:{align};'
-            f'border:1px solid #ccc;{"font-weight:bold;" if bold else ""}white-space:nowrap;">{text}</td>'
+            f'border:1px solid #ccc;{"font-weight:bold;" if bold else ""}white-space:nowrap;{extra}">{text}</td>'
         )
         row = "<tr>"
         row += "".join(td(v, bg) for v in vals_25)
         row += td(rt2_25, bg if row_type != "normal" else C_CELL_RT2_25, bold=True)
-        row += td(label, bg if row_type != "normal" else C_CELL_BRAND, align="left", bold=True)
+        row += td(label, bg if row_type != "normal" else C_CELL_BRAND, align="left", bold=True, extra=STICKY)
         if show_cutoff:
             row += td(cutoffs.get(label, "") or "-", bg, align="center")
         row += "".join(td(v, bg) for v in vals_26)

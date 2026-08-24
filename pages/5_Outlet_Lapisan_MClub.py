@@ -17,7 +17,7 @@ from render_outlet_image import build_html_table, build_report_rows
 auth.require_level(4, page="Outlet Lapisan (MClub)")
 
 
-@st.dialog("Omset Seeker")
+@st.dialog("Omset Seeker", width="large")
 def _show_omset_seeker_modal(site: str, omshar_type: str, outlet_name: str) -> None:
     """Reuse jalur render yang sama dengan halaman Omset Seeker (build_report_rows +
     build_html_table) supaya tabelnya persis sama, bukan hitung ulang dengan cara lain."""
