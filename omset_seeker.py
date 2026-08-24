@@ -6,7 +6,9 @@ Sumber data: omset_pipeline/output/CSV/{UMUM,HOREKA}/OMSHAR {tipe} {brand} TRANS
 (dihasilkan oleh transpose.py — header 8 baris sudah di-strip di file *_query.csv)
 """
 
+import os
 import re
+import shutil
 from functools import lru_cache
 from pathlib import Path
 
@@ -14,6 +16,7 @@ import openpyxl
 import pandas as pd
 
 CSV_DIR = Path(__file__).resolve().parent / "omset_pipeline" / "output" / "CSV"
+CACHE_DIR = CSV_DIR.parent / "CACHE"
 TOKO_GABUNGAN_DIR = Path(r"D:\Data BIA\INFO BIA\Toko Gabungan")
 
 # UMUM: grup gabungan sumbernya file Excel bulanan dari divisi lain, satu file
@@ -172,18 +175,59 @@ def get_cutoff_date(brand: str = VALIDATION_BRAND, omshar_type: str = "UMUM", sh
     return f"{day} {months_id[month - 1]} {year}"
 
 
+def _source_csv_paths(brand: str, omshar_type: str) -> list[Path]:
+    sheets = ("DAPUL", "LAPUL") if omshar_type == "UMUM" else ("HOREKA",)
+    return [p for p in (_csv_path(omshar_type, brand, s) for s in sheets) if p.exists()]
+
+
+def _parquet_path(brand: str, omshar_type: str) -> Path:
+    subdir = "UMUM" if omshar_type == "UMUM" else "HOREKA"
+    return CACHE_DIR / subdir / f"OMSHAR {omshar_type} {brand}.parquet"
+
+
 @lru_cache(maxsize=None)
 def load_brand(brand: str, omshar_type: str = "UMUM") -> pd.DataFrame:
-    """Load + cache semua sheet wilayah untuk satu brand (DAPUL+LAPUL utk UMUM, HOREKA utk HOREKA)."""
-    sheets = ("DAPUL", "LAPUL") if omshar_type == "UMUM" else ("HOREKA",)
-    frames = []
-    for sheet in sheets:
-        path = _csv_path(omshar_type, brand, sheet)
-        if path.exists():
-            frames.append(_read_query_csv(path))
-    if not frames:
+    """Load + cache semua sheet wilayah untuk satu brand (DAPUL+LAPUL utk UMUM, HOREKA utk HOREKA).
+
+    Disk cache: hasil parse CSV disimpan sebagai parquet di output/CACHE/ -- baca parquet
+    ~30x lebih cepat daripada parse CSV (~1 GB per grup), jadi pencarian pertama setelah
+    app restart tidak lagi ~20 detik. Invalidasi OTOMATIS: kalau ada CSV sumber yang LEBIH
+    BARU dari parquet-nya (mis. habis transpose, termasuk lewat RUN.bat manual), parse
+    ulang -- ditambah clear eksplisit lewat clear_brand_cache() dari halaman Transpose."""
+    sources = _source_csv_paths(brand, omshar_type)
+    if not sources:
         return pd.DataFrame(columns=["Wilayah", "Site", "Outlet"] + MONTH_LABELS)
-    return pd.concat(frames, ignore_index=True)
+
+    pq_path = _parquet_path(brand, omshar_type)
+    if pq_path.exists():
+        newest_csv = max(p.stat().st_mtime for p in sources)
+        if pq_path.stat().st_mtime >= newest_csv:
+            try:
+                return pd.read_parquet(pq_path)
+            except Exception:
+                pass  # cache korup -- jatuh ke parse ulang di bawah
+
+    df = pd.concat([_read_query_csv(p) for p in sources], ignore_index=True)
+
+    try:
+        pq_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = pq_path.with_name(f".{pq_path.stem}.{os.getpid()}.tmp.parquet")
+        try:
+            df.to_parquet(tmp)
+            os.replace(tmp, pq_path)
+        finally:
+            tmp.unlink(missing_ok=True)
+    except Exception:
+        pass  # gagal tulis cache tidak fatal -- berikutnya cukup parse ulang lagi
+    return df
+
+
+def clear_brand_cache() -> None:
+    """Hapus parquet disk cache + lru_cache in-memory load_brand(). Dipanggil setelah
+    Transpose (bareng panggilan cache_clear lainnya di pages/1_Sync_dan_Transpose.py).
+    mtime-check di load_brand() sebenarnya sudah cukup, ini supaya cache langsung bersih."""
+    load_brand.cache_clear()
+    shutil.rmtree(CACHE_DIR, ignore_errors=True)
 
 
 def query_brand(brand: str, site_list: list[str], omshar_type: str = "UMUM") -> pd.DataFrame:

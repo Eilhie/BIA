@@ -8,7 +8,7 @@ Cara kerja:
   - File OMSHAR per brand (mis. OMSHAR UMUM ABIDIN.xls) punya 1 sheet per wilayah
     (BTN, DKI, BDB, JBU, JBS, JTU, JTS, JIU, JIS, BLI, SMU, SMB, SMS, LPB, NTR,
      KLT, KLB, SLS, SLU, PPA), masing-masing 8 baris header + baris data.
-  - DAPUL  = header (dari sheet pertama yg ada) + gabungan baris data
+  - DAPUL  = header (dari sheet dengan PERIODE paling baru) + gabungan baris data
              BTN, DKI, BDB, JBU, JBS, JTU, JTS, JIU, JIS, BLI (urut).
   - LAPUL  = header + gabungan baris data SMU, SMB, SMS, LPB, NTR, KLT, KLB,
              SLS, SLU, PPA (urut).
@@ -21,18 +21,35 @@ Cara kerja:
       output/DB TRANSPOSED/HOREKA (XLSX)
       output/CSV/UMUM             (CSV atasan + CSV query)
       output/CSV/HOREKA           (CSV atasan + CSV query)
+
+CATATAN PERUBAHAN (lihat masing-masing bagian bertanda [OPT]):
+  1. Mode "all" sekarang pakai SATU Pool gabungan (bukan 3 Pool berurutan),
+     dengan jumlah worker di-cap ke jumlah core CPU (default 12, tapi tetap
+     dibatasi os.cpu_count()).
+  2. CSV ditulis langsung dari `header`/`combined_rows` yang sudah ada di
+     memori saat proses per-brand -- tidak lagi re-open XLSX yang baru saja
+     ditulis (menghapus round-trip openpyxl -> pandas.read_excel).
+     PENTING: verifikasi ekuivalensi output vs versi lama sebelum dipakai
+     produksi (lihat catatan di write_csv_dual_from_rows()).
+  3. get_file_cutoffs_parallel() -- paralelkan lewat SUBPROCESS python
+     terpisah (pola sama seperti run_umum() dkk yang sudah aman), dengan
+     fallback otomatis ke versi serial (get_file_cutoffs()) kalau subprocess
+     gagal untuk alasan apa pun.
 """
 
 import argparse
-from pathlib import Path
-from multiprocessing import Pool
+import csv
+import json
 import os
+import subprocess
+import sys
 import time
 import uuid
+from multiprocessing import Pool
+from pathlib import Path
 
 import xlrd
 import openpyxl
-import pandas as pd
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -179,7 +196,7 @@ def _file_max_periode(path_str: str):
     mentah. xlrd (format .xls lama) tidak bisa baca satu sel tanpa parse
     seluruh sheet lebih dulu -- baca 1 file (~20 sheet wilayah) makan waktu
     ~15-25 detik, dan halaman diagnostik (Cek Cutoff OMSHAR) perlu baca INI
-    untuk PULUHAN file sekaligus (lihat get_file_cutoffs())."""
+    untuk PULUHAN file sekaligus (lihat get_file_cutoffs() / get_file_cutoffs_parallel())."""
     path = Path(path_str)
     if not path.exists():
         return None
@@ -201,27 +218,73 @@ def _file_max_periode(path_str: str):
 
 
 def get_file_cutoffs(paths: list[str]) -> dict:
-    """Return {path_str: (y,m,d) atau None} untuk banyak file mentah SEKALIGUS.
-
-    SENGAJA serial, bukan paralel -- dua percobaan paralelisasi sudah dicoba
-    dan sama-sama tidak aman/tidak membantu untuk kasus ini:
-    1. multiprocessing.Pool: Windows 'spawn' butuh re-import modul __main__,
-       dan skrip halaman Streamlit BUKAN __main__ yang bersih (dieksekusi
-       lewat runpy oleh Streamlit/AppTest sendiri) -- terbukti nyata, tiap
-       worker malah re-run SELURUH halaman dari awal (termasuk gerbang
-       login) alih-alih cuma jalanin fungsi worker-nya, proses meledak.
-       (run_umum() dkk aman pakai Pool karena dipanggil dari SUBPROCESS
-       python terpisah lewat pages/1_Sync_dan_Transpose.py, bukan in-process
-       -- itu __main__ yang sungguhan, konteks beda.)
-    2. ThreadPoolExecutor: aman (tidak re-import apa pun), tapi TIDAK
-       membantu -- parsing xlrd itu CPU-bound murni Python, GIL bikin
-       thread-thread saling tunggu, terbukti nyata 6 file tetap >90 detik
-       (harusnya ~120 detik kalau serial, jadi threading di sini nyaris
-       tidak ada gunanya untuk beban kerja ini).
-    Kalau nanti benar-benar perlu dipercepat, caranya harus lewat SUBPROCESS
-    python terpisah (pola yang sama seperti run_umum()/run_horeka()), bukan
-    in-process dari halaman Streamlit manapun."""
+    """Return {path_str: (y,m,d) atau None} untuk banyak file mentah SEKALIGUS,
+    SERIAL. Ini fallback aman dipakai get_file_cutoffs_parallel() di bawah --
+    lihat docstring di sana untuk alasan kenapa in-process parallel (Pool /
+    ThreadPoolExecutor) tidak dipakai di halaman Streamlit manapun."""
     return {p: _file_max_periode(p) for p in paths}
+
+
+# [OPT-3] Paralelisasi get_file_cutoffs via SUBPROCESS python terpisah.
+def _cutoff_worker_main(paths: list[str]) -> None:
+    """Entry point saat script ini dipanggil sebagai subprocess worker
+    (lihat blok `if __name__ == "__main__"` di bawah). Cetak hasil sebagai
+    JSON ke stdout -- proses induk yang parse."""
+    result = get_file_cutoffs(paths)
+    # tuple bukan JSON-native -> ubah ke list supaya json.dumps aman,
+    # nanti di sisi pemanggil diubah balik ke tuple.
+    serializable = {p: (list(v) if v is not None else None) for p, v in result.items()}
+    print(json.dumps(serializable))
+
+
+def get_file_cutoffs_parallel(paths: list[str], n_workers: int | None = None, timeout: int = 120) -> dict:
+    """Versi paralel dari get_file_cutoffs(), lewat SUBPROCESS python asli
+    (bukan multiprocessing.Pool, bukan ThreadPoolExecutor) -- pola yang sama
+    dengan run_umum()/run_horeka() yang dipanggil dari
+    pages/1_Sync_dan_Transpose.py, karena itu SUDAH terbukti aman: proses OS
+    terpisah tidak ikut re-import/re-run halaman Streamlit (beda dengan
+    multiprocessing.Pool 'spawn' di Windows), dan tidak kena batasan GIL
+    (beda dengan ThreadPoolExecutor, yang percuma untuk kerja CPU-bound
+    murni Python seperti parsing xlrd -- lihat catatan lengkap di
+    get_file_cutoffs() versi lama / docstring _file_max_periode()).
+
+    Kalau subprocess gagal untuk alasan apa pun (python executable tidak
+    ketemu, timeout, dsb), fallback OTOMATIS ke get_file_cutoffs() serial --
+    caller tidak perlu tahu/handle bedanya.
+    """
+    if not paths:
+        return {}
+
+    n_workers = min(n_workers or 8, os.cpu_count() or 4, len(paths))
+    if n_workers <= 1:
+        return get_file_cutoffs(paths)
+
+    chunks = [c for c in (paths[i::n_workers] for i in range(n_workers)) if c]
+
+    try:
+        procs = [
+            subprocess.Popen(
+                [sys.executable, __file__, "_cutoff_worker", *chunk],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            for chunk in chunks
+        ]
+
+        results: dict = {}
+        for p in procs:
+            out, err = p.communicate(timeout=timeout)
+            if p.returncode != 0:
+                raise RuntimeError(f"cutoff worker gagal (code {p.returncode}): {err.strip()}")
+            chunk_result = json.loads(out)
+            for path_str, val in chunk_result.items():
+                results[path_str] = tuple(val) if val is not None else None
+        return results
+
+    except Exception as e:
+        print(f"[WARN] get_file_cutoffs_parallel gagal ({type(e).__name__}: {e}), fallback ke serial")
+        return get_file_cutoffs(paths)
 
 
 def stack_sheets(wb, sheet_order):
@@ -321,33 +384,43 @@ def _atomic_write(out_path: Path, write_fn) -> None:
 
 
 # ── CSV EXPORT ────────────────────────────────────────────────────────────────
+# [OPT-2] CSV ditulis LANGSUNG dari `header`/`data_rows` yang sudah ada di
+# memori (dipanggil dari process_brand() di bawah, per sheet, tepat setelah
+# write_stacked_sheet()) -- TIDAK lagi re-open XLSX yang baru saja ditulis
+# lewat pandas.read_excel (round-trip openpyxl -> pandas dihapus).
+#
+# PENTING -- verifikasi ekuivalensi sebelum dipakai produksi:
+#   - Versi lama baca ulang lewat pd.read_excel(..., dtype=str), yang
+#     memformat angka/tanggal Excel jadi representasi string tertentu.
+#     Versi baru menulis nilai mentah dari xlrd.cell_value() (bisa float
+#     Python, str, dst) apa adanya via csv.writer.
+#   - Untuk sebagian besar kolom (Site, KRT angka) hasilnya biasanya identik,
+#     tapi WAJIB diff CSV lama vs baru untuk beberapa brand representatif
+#     (mis. yang punya multi-file seperti SIMER/SIJO, dan yang single-file
+#     seperti ABIDIN) sebelum menghapus jalur save_csv_dual() lama:
+#       diff <(sort old.csv) <(sort new.csv)   # atau bandingkan baris demi baris
+#   - Kalau ada selisih format angka, tambahkan normalisasi eksplisit di
+#     _write_rows() (mis. format float tertentu) sebelum go-live.
 
-def save_csv_dual(xlsx_path: Path, csv_subdir: Path):
-    """
-    Dari XLSX hasil transpose, buat 2 CSV per sheet:
+def _write_rows(path: Path, rows: list) -> None:
+    with open(path, "w", newline="", encoding="utf-8-sig") as f:
+        csv.writer(f).writerows(rows)
+
+
+def write_csv_dual_from_rows(csv_subdir: Path, stem: str, sheet_name: str, header: list, data_rows: list) -> None:
+    """Tulis 2 CSV per sheet langsung dari data di memori:
       - <stem>_<SHEET>.csv        → include header (untuk atasan)
       - <stem>_<SHEET>_query.csv  → skip header   (untuk Python query)
     """
     csv_subdir.mkdir(parents=True, exist_ok=True)
-    xl = pd.ExcelFile(xlsx_path, engine="openpyxl")
 
-    for sheet in xl.sheet_names:
-        # --- untuk atasan: header ikut ---
-        df_full = pd.read_excel(
-            xl,
-            sheet_name=sheet,
-            header=None,   # baca mentah, tidak parse header
-            dtype=str,     # jaga format string (site number, dsb)
-        )
-        csv_full = csv_subdir / f"{xlsx_path.stem}_{sheet}.csv"
-        _atomic_write(csv_full, lambda p: df_full.to_csv(p, index=False, header=False, encoding="utf-8-sig"))
-        print(f"    -> CSV (atasan) : {csv_full.name}")
+    csv_full = csv_subdir / f"{stem}_{sheet_name}.csv"
+    _atomic_write(csv_full, lambda p: _write_rows(p, header + data_rows))
+    print(f"    -> CSV (atasan) : {csv_full.name}")
 
-        # --- untuk Python query: skip 8 baris header ---
-        df_query = df_full.iloc[HEADER_ROWS:].reset_index(drop=True)
-        csv_query = csv_subdir / f"{xlsx_path.stem}_{sheet}_query.csv"
-        _atomic_write(csv_query, lambda p: df_query.to_csv(p, index=False, header=False, encoding="utf-8-sig"))
-        print(f"    -> CSV (query)  : {csv_query.name}")
+    csv_query = csv_subdir / f"{stem}_{sheet_name}_query.csv"
+    _atomic_write(csv_query, lambda p: _write_rows(p, data_rows))
+    print(f"    -> CSV (query)  : {csv_query.name}")
 
 
 # ── SKU RAW CACHE ─────────────────────────────────────────────────────────────
@@ -359,20 +432,27 @@ def save_csv_dual(xlsx_path: Path, csv_subdir: Path):
 def write_sku_raw_csv(omshar_type: str, file_name: str, rows: list, out_subdir: str) -> None:
     if not rows:
         return
-    df = pd.DataFrame(rows)
     needed = [COL_SITE] + COLS_2025 + COLS_2026
-    if df.shape[1] <= max(needed):
+    max_needed = max(needed)
+
+    out_rows = [["Site"] + MONTH_LABELS_2025 + MONTH_LABELS_2026]
+    skipped = False
+    for row in rows:
+        if len(row) <= max_needed:
+            skipped = True
+            continue
+        site = str(row[COL_SITE]).strip()
+        out_rows.append([site] + [row[c] for c in COLS_2025] + [row[c] for c in COLS_2026])
+
+    if skipped and len(out_rows) <= 1:
         print(f"  [WARN] SKU_RAW {file_name}: kolom tidak lengkap, di-skip")
         return
-    out = df[needed].copy()
-    out.columns = ["Site"] + MONTH_LABELS_2025 + MONTH_LABELS_2026
-    out["Site"] = out["Site"].astype(str).str.strip()
 
     out_dir = CSV_DIR / out_subdir / "SKU_RAW"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{file_name}.csv"
-    _atomic_write(out_path, lambda p: out.to_csv(p, index=False, encoding="utf-8-sig"))
-    print(f"  SKU_RAW : {out_path.name} ({len(out)} baris)")
+    _atomic_write(out_path, lambda p: _write_rows(p, out_rows))
+    print(f"  SKU_RAW : {out_path.name} ({len(out_rows) - 1} baris)")
 
 
 # ── PROCESS PER BRAND ─────────────────────────────────────────────────────────
@@ -399,6 +479,9 @@ def process_brand(omshar_type, brand, file_map, groups, out_subdir):
     wb_out = openpyxl.Workbook(write_only=True)
     per_file_rows = {file_name: [] for file_name, _ in file_wbs}
 
+    stem = f"OMSHAR {omshar_type} {brand} TRANSPOSED"
+    csv_subdir = CSV_DIR / out_subdir
+
     wrote_any = False
     for sheet_name, sheet_order in groups:
         header = None
@@ -419,6 +502,10 @@ def process_brand(omshar_type, brand, file_map, groups, out_subdir):
         write_stacked_sheet(wb_out, sheet_name, header, combined_rows)
         suffix = f" (gabungan {len(file_wbs)} file)" if len(file_wbs) > 1 else ""
         print(f"  {brand} {sheet_name}: {len(combined_rows)} baris{suffix}")
+
+        # [OPT-2] tulis CSV langsung dari memori, bukan reload XLSX nanti.
+        write_csv_dual_from_rows(csv_subdir, stem, sheet_name, header, combined_rows)
+
         wrote_any = True
 
     for _, wb_in in file_wbs:
@@ -430,16 +517,12 @@ def process_brand(omshar_type, brand, file_map, groups, out_subdir):
     if not wrote_any:
         return None
 
-    # Simpan XLSX
+    # Simpan XLSX (tetap dibuat -- ini yang dibuka atasan langsung di Excel)
     out_dir = OUTPUT_DIR / out_subdir
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"OMSHAR {omshar_type} {brand} TRANSPOSED.xlsx"
+    out_path = out_dir / f"{stem}.xlsx"
     _atomic_write(out_path, wb_out.save)
     print(f"  Tersimpan XLSX : {out_path.name}")
-
-    # Simpan CSV (dual: atasan + query)
-    csv_subdir = CSV_DIR / out_subdir
-    save_csv_dual(out_path, csv_subdir)
 
     return out_path
 
@@ -468,8 +551,12 @@ def _brand_worker(args):
         return _WORKER_FAILED
 
 
-def _run_pool(args, label):
-    n_workers = min(4, len(args))
+def _run_pool(args, label, max_workers=12):
+    # [OPT-1] Cap ke jumlah core CPU yang benar-benar ada -- oversubscribe
+    # di atas core fisik untuk kerja CPU-bound (parsing xlrd) memperlambat,
+    # bukan mempercepat (context-switch overhead). max_workers=12 adalah
+    # target atas, bukan nilai yang dipaksakan.
+    n_workers = min(max_workers, os.cpu_count() or max_workers, len(args))
     print(f"  Paralel: {n_workers} proses untuk {len(args)} brand (output mungkin bercampur)\n")
     with Pool(processes=n_workers) as pool:
         results = pool.map(_brand_worker, args)
@@ -499,6 +586,23 @@ def run_horeka_keg():
     _run_pool(args, "HOREKA WITH KEG")
 
 
+def run_all():
+    """[OPT-1] Mode 'all' = SATU Pool gabungan untuk UMUM + HOREKA +
+    HOREKA WITH KEG, bukan 3 Pool terpisah berurutan. Menghapus overhead
+    spawn Pool 3x dan memungkinkan brand dari mode berbeda diproses
+    concurrent selama masih di bawah cap worker."""
+    print("=== TRANSPOSE ALL (UMUM + HOREKA + HOREKA WITH KEG) ===")
+    groups_umum   = [("DAPUL", DAPUL), ("LAPUL", LAPUL)]
+    groups_horeka = [("HOREKA", HOREKA)]
+
+    args = (
+        [("UMUM",   brand, UMUM_FILE,      groups_umum,   "UMUM")   for brand in BRAND_ORDER]
+        + [("HOREKA", brand, HOREKA_FILE,     groups_horeka, "HOREKA") for brand in BRAND_ORDER]
+        + [("HOREKA", brand, HOREKA_KEG_FILE, groups_horeka, "HOREKA") for brand in HOREKA_KEG_BRAND_ORDER]
+    )
+    _run_pool(args, "ALL")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Transpose OMSHAR per wilayah jadi DAPUL/LAPUL/HOREKA + export CSV"
@@ -523,9 +627,13 @@ def main():
             print("Pilihan tidak dikenali, dibatalkan.")
             return
 
-    if mode in ("umum", "all"):
+    # [OPT-1] mode "all" sekarang lewat run_all() (satu Pool gabungan),
+    # bukan run_umum() + run_horeka() + run_horeka_keg() berurutan.
+    if mode == "all":
+        run_all()
+    elif mode == "umum":
         run_umum()
-    if mode in ("horeka", "all"):
+    elif mode == "horeka":
         run_horeka()
         run_horeka_keg()
 
@@ -535,4 +643,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # [OPT-3] Dispatch khusus: kalau script ini dipanggil sebagai subprocess
+    # worker oleh get_file_cutoffs_parallel() (argv[1] == "_cutoff_worker"),
+    # jalankan worker itu saja dan keluar -- JANGAN masuk ke main() biasa.
+    if len(sys.argv) > 1 and sys.argv[1] == "_cutoff_worker":
+        _cutoff_worker_main(sys.argv[2:])
+    else:
+        main()

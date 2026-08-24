@@ -112,10 +112,7 @@ if "last_query" in st.session_state:
     q_site, q_type, q_with_keg = st.session_state["last_query"]
     want_keg = q_with_keg and q_type == "HOREKA"
 
-    with st.spinner(
-        f"Memuat data {q_type} (~10 detik untuk pencarian pertama di grup ini, "
-        "setelahnya jadi cepat selama app tidak di-restart)..."
-    ):
+    with st.spinner(f"Memuat data {q_type}..."):
         try:
             row_cells, info, cutoff = build_report_rows(q_site, q_type, want_keg)
         except ValueError:
@@ -137,9 +134,16 @@ if "last_query" in st.session_state:
         with col_excel:
             # Excel murni pakai openpyxl (bukan matplotlib) jadi tidak terpengaruh kalau
             # matplotlib gagal dimuat -- taruh di luar try/except Copy/Print di bawah.
+            # Bytes di-cache per (site, grup, with_keg) -- st.download_button mengevaluasi
+            # argumennya tiap rerun, tanpa cache workbook openpyxl dibangun ulang terus.
+            # precomputed=row_cells yang sudah dihitung di atas -- tidak query ulang.
+            xlsx_cache_key = (q_site, q_type, want_keg)
+            if st.session_state.get("xlsx_cache_key") != xlsx_cache_key:
+                st.session_state["xlsx_bytes"] = build_report_excel(precomputed=(row_cells, info, cutoff))
+                st.session_state["xlsx_cache_key"] = xlsx_cache_key
             st.download_button(
                 "Download Excel",
-                build_report_excel(q_site, q_type, with_keg=want_keg),
+                st.session_state["xlsx_bytes"],
                 file_name=f"{info['Site']} {info['Outlet']}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
@@ -156,9 +160,13 @@ if "last_query" in st.session_state:
                 cache_key = (q_site, q_type, want_keg)
                 if st.session_state.get("png_cache_key") != cache_key:
                     with st.spinner("Menyiapkan laporan untuk copy/print..."):
-                        png_path = render_outlet_report(q_site, q_type, with_keg=want_keg)
-                        with open(png_path, "rb") as f:
-                            st.session_state["png_bytes"] = f.read()
+                        # precomputed=row_cells yang sudah dihitung di atas -- tidak query
+                        # ulang; bytes kembali langsung dari render (tanpa baca ulang file).
+                        _, png_bytes = render_outlet_report(
+                            q_site, q_type, with_keg=want_keg,
+                            precomputed=(row_cells, info, cutoff),
+                        )
+                        st.session_state["png_bytes"] = png_bytes
                         st.session_state["png_cache_key"] = cache_key
 
                 b64 = base64.b64encode(st.session_state["png_bytes"]).decode()

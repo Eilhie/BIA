@@ -19,6 +19,7 @@ Konsep kunci:
     ada di RAW (perlu Jan-Jun 2025 yang tidak pernah kita lihat).
 """
 
+import datetime
 import os
 import re
 import uuid
@@ -58,6 +59,20 @@ _MONTH_NORMALIZE = {
 def _normalize_month_key(mon: str, yy: str) -> str | None:
     key = _MONTH_NORMALIZE.get(mon.upper())
     return f"{key}{yy}" if key else None
+
+
+_MONTH_ABBR_ID = {
+    1: "JAN", 2: "FEB", 3: "MAR", 4: "APR", 5: "MEI", 6: "JUN",
+    7: "JUL", 8: "AGS", 9: "SEP", 10: "OKT", 11: "NOV", 12: "DES",
+}
+
+
+def current_month_key(today: datetime.date | None = None) -> str:
+    """Kunci kolom bulan berjalan di archive, format sama dengan kolom bulanan
+    lain (mis. 'AGS26' untuk Agustus 2026). Bulan ini biasanya belum lengkap
+    (masih berjalan) sampai RAW berikutnya masuk dan menimpanya."""
+    d = today or datetime.date.today()
+    return f"{_MONTH_ABBR_ID[d.month]}{d.year % 100:02d}"
 
 
 def _atomic_write_csv(df: pd.DataFrame, path: Path) -> None:
