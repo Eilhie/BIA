@@ -31,9 +31,9 @@ def get_detail_sheet(sheet_key: str) -> pd.DataFrame:
 auth.require_level(5, page="Cukai Kompetitor")
 st.title("Cukai Kompetitor")
 st.caption(
-    f"Sumber: `{cp.REKAP_FILE}`, sheet `{cp.REKAP_SHEET}` -- estimasi volume kompetitor dari data "
-    "cukai (pajak minuman beralkohol), murni baca & tampilkan, editing tetap di file Excel-nya "
-    "sendiri. v1 baru cover tabel 'Bir OT vs Musuh'; breakdown per wilayah/kota belum di-include."
+    f"Sumber: `{cp.REKAP_FILE}` -- estimasi volume kompetitor dari data cukai (pajak minuman "
+    "beralkohol), murni baca & tampilkan, editing tetap di file Excel-nya sendiri. Breakdown per "
+    "wilayah/kota belum di-include."
 )
 
 if not cp.is_available():
@@ -55,34 +55,53 @@ with tab_rekap:
         picked_brands = st.multiselect("Brand", brands, default=brands, key="cukai_brands")
 
         view = df[df["Brand"].isin(picked_brands)].sort_values(["Brand", "MonthDate"])
-
-        st.subheader("Tren volume (KRT, estimasi dari cukai)")
-        pivot_qty = view.pivot_table(index="MonthKey", columns="Brand", values="Qty", aggfunc="sum")
         month_order = view.drop_duplicates("MonthKey").sort_values("MonthDate")["MonthKey"].tolist()
+
+        st.subheader("Volume per bulan (KRT, estimasi dari cukai)")
+        pivot_qty = view.pivot_table(index="MonthKey", columns="Brand", values="Qty", aggfunc="sum")
         pivot_qty = pivot_qty.reindex(month_order)
-        st.line_chart(pivot_qty)
+        st.bar_chart(pivot_qty)
 
-        st.subheader("Kelengkapan data per brand")
-        st.caption(
-            "Bulan terakhir yang punya angka > 0 -- kalau jauh dari bulan sekarang, kemungkinan "
-            "data cukai brand itu belum diupdate di file sumbernya (bukan berarti volumenya benar-benar 0)."
-        )
-        gap_rows = []
-        for brand in brands:
-            sub = df[df["Brand"] == brand].sort_values("MonthDate")
-            nonzero = sub[sub["Qty"] > 0]
-            last_month = nonzero["MonthKey"].iloc[-1] if not nonzero.empty else "-"
-            gap_rows.append({"Brand": brand, "Bulan terakhir ada data": last_month})
-        st.dataframe(pd.DataFrame(gap_rows), use_container_width=True, hide_index=True)
+        st.subheader("Pangsa pasar per bulan")
+        pivot_share = view.pivot_table(index="MonthKey", columns="Brand", values="Share", aggfunc="sum")
+        pivot_share = pivot_share.reindex(month_order)
+        st.bar_chart(pivot_share)
 
-        st.subheader("Tabel detail (Qty + Share)")
-        table = view.copy()
-        table["Qty"] = table["Qty"].apply(lambda v: f"{v:,.0f}".replace(",", "."))
-        table["Share"] = table["Share"].apply(lambda v: f"{v * 100:.1f}%" if pd.notna(v) else "-")
-        table = table[["Brand", "Month", "Qty", "Share"]].rename(
-            columns={"Month": "Bulan", "Qty": "Qty (KRT)", "Share": "Pangsa"}
-        )
-        st.dataframe(table, use_container_width=True, hide_index=True)
+        st.divider()
+        col_qty, col_gap = st.columns([3, 1])
+        with col_gap:
+            st.caption("**Kelengkapan data**")
+            st.caption(
+                "Bulan terakhir dengan angka > 0. Kalau jauh dari bulan sekarang, kemungkinan data "
+                "cukai brand itu belum diupdate di sumbernya (bukan berarti volumenya benar-benar 0)."
+            )
+            gap_rows = []
+            for brand in brands:
+                sub = df[df["Brand"] == brand].sort_values("MonthDate")
+                nonzero = sub[sub["Qty"] > 0]
+                last_month = nonzero["MonthKey"].iloc[-1] if not nonzero.empty else "-"
+                is_stale = brand in picked_brands and last_month != month_order[-1] if month_order else False
+                gap_rows.append({"Brand": brand, "Update terakhir": ("⚠️ " if is_stale else "") + last_month})
+            st.dataframe(pd.DataFrame(gap_rows), use_container_width=True, hide_index=True)
+
+        with col_qty:
+            st.caption("**Tabel Qty (KRT) -- warna makin gelap = volume makin besar, baca cepat per baris/kolom**")
+            pivot_qty_disp = pivot_qty.T.reindex(columns=month_order)
+            st.dataframe(
+                pivot_qty_disp.style
+                    .background_gradient(cmap="Blues", axis=None)
+                    .format(lambda v: f"{v:,.0f}".replace(",", ".") if pd.notna(v) else "-"),
+                use_container_width=True,
+            )
+
+            st.caption("**Tabel Pangsa Pasar -- warna makin gelap = pangsa makin besar**")
+            pivot_share_disp = pivot_share.T.reindex(columns=month_order)
+            st.dataframe(
+                pivot_share_disp.style
+                    .background_gradient(cmap="Greens", axis=None, vmin=0, vmax=1)
+                    .format(lambda v: f"{v * 100:.1f}%" if pd.notna(v) else "-"),
+                use_container_width=True,
+            )
 
 with tab_detail:
     st.caption(
@@ -121,11 +140,14 @@ with tab_detail:
             pivot_qty = pivot_qty.reindex(index=[r for r in picked_rows if r in pivot_qty.index])
 
             st.subheader("Qty (KRT) per bulan")
+            st.caption("Warna makin gelap = volume makin besar, baca cepat per baris/kolom.")
             st.dataframe(
-                pivot_qty.style.format(lambda v: f"{v:,.0f}".replace(",", ".") if pd.notna(v) else "-"),
+                pivot_qty.style
+                    .background_gradient(cmap="Blues", axis=None)
+                    .format(lambda v: f"{v:,.0f}".replace(",", ".") if pd.notna(v) else "-"),
                 use_container_width=True,
             )
 
             if len(picked_rows) <= 15:
-                st.subheader("Tren")
-                st.line_chart(pivot_qty.T)
+                st.subheader("Tren (bar)")
+                st.bar_chart(pivot_qty.T)
