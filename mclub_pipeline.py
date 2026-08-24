@@ -304,10 +304,17 @@ def parse_raw_horeka(path, sheet_name: str = "list") -> pd.DataFrame:
 
 # ── ARCHIVE (upsert histori) ──────────────────────────────────────────────────
 
+# Kolom kode (bisa berawalan nol, mis. Depo "0104", Wil "01") -- dipaksa str di load
+# supaya konsisten dengan RAW yang dibaca via openpyxl (juga string), dan tidak
+# ke-infer jadi angka oleh read_csv (yang akan membuang nol di depan + bikin
+# dtype-nya bentrok waktu di-merge_into_archive() -- lihat catatan di sana).
+_CODE_COLS = ["Site", "Wil", "Depo"]
+
+
 def load_archive(category: str) -> pd.DataFrame:
     path = ARCHIVE_PATH[category]
     if path.exists():
-        return pd.read_csv(path, dtype={"Site": str}, encoding="utf-8-sig")
+        return pd.read_csv(path, dtype=dict.fromkeys(_CODE_COLS, str), encoding="utf-8-sig")
     return pd.DataFrame(columns=["Site"])
 
 
@@ -333,6 +340,15 @@ def merge_into_archive(archive: pd.DataFrame, new_data: pd.DataFrame) -> pd.Data
     result = a.copy()
     for c in all_cols:
         mask = n[c].notna()
+        if not mask.any():
+            continue
+        # dtype archive vs RAW baru bisa beda (mis. kolom kode yang archive lama-nya
+        # ke-infer angka pas round-trip CSV, RAW baru selalu string dari openpyxl) --
+        # pandas modern MENOLAK assignment lintas dtype yang tidak searah (TypeError),
+        # jadi upcast ke object dulu kalau dtype-nya beda supaya upsert tidak pernah
+        # crash gara-gara ini, apa pun kolomnya.
+        if result[c].dtype != n[c].dtype:
+            result[c] = result[c].astype(object)
         result.loc[mask, c] = n.loc[mask, c]
     return result.reset_index()
 
