@@ -82,6 +82,38 @@ def get_last_modified() -> datetime.datetime | None:
     return datetime.datetime.fromtimestamp(REKAP_FILE.stat().st_mtime)
 
 
+def collapse_past_years(df: pd.DataFrame, group_cols: list[str], value_cols: list[str]) -> pd.DataFrame:
+    """Ringkas bulan-bulan tahun LALU jadi satu titik rata-rata per tahun (mis.
+    'Rata2 2024', 'Rata2 2025' -- nama sama seperti kolom rata-rata yang sudah
+    ada di file sumbernya sendiri), tahun TERBARU yang ada di data dibiarkan
+    tetap per-bulan -- supaya tabel/chart fokus ke tahun berjalan tanpa
+    kehilangan histori sepenuhnya. 'Tahun terbaru' diambil dari data itu sendiri
+    (bukan tanggal sistem), supaya tetap benar kalau file belum sempat diupdate
+    sampai tahun berjalan yang sesungguhnya."""
+    if df.empty or "MonthDate" not in df.columns:
+        return df
+
+    current_year = df["MonthDate"].dt.year.max()
+    is_current = df["MonthDate"].dt.year == current_year
+
+    current_part = df[is_current].copy()
+    current_part["Period"] = current_part["MonthKey"]
+    current_part["PeriodDate"] = current_part["MonthDate"]
+
+    past_part = df[~is_current].copy()
+    if past_part.empty:
+        agg = pd.DataFrame(columns=group_cols + value_cols + ["Period", "PeriodDate"])
+    else:
+        past_part["Year"] = past_part["MonthDate"].dt.year
+        agg = past_part.groupby(group_cols + ["Year"], as_index=False)[value_cols].mean()
+        agg["Period"] = "Rata2 " + agg["Year"].astype(str)
+        agg["PeriodDate"] = pd.to_datetime(agg["Year"].astype(str) + "-01-01")
+        agg = agg.drop(columns=["Year"])
+
+    keep_cols = group_cols + value_cols + ["Period", "PeriodDate"]
+    return pd.concat([agg[keep_cols], current_part[keep_cols]], ignore_index=True)
+
+
 # ── SHEET DETAIL LOKAL/EXPORT (Balihai, Delta) ────────────────────────────────
 
 _MONTH_ABBR_EN = {

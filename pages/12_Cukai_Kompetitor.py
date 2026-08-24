@@ -55,15 +55,20 @@ with tab_rekap:
         picked_brands = st.multiselect("Brand", brands, default=brands, key="cukai_brands")
 
         view = df[df["Brand"].isin(picked_brands)].sort_values(["Brand", "MonthDate"])
-        month_order = view.drop_duplicates("MonthKey").sort_values("MonthDate")["MonthKey"].tolist()
+        view = cp.collapse_past_years(view, group_cols=["Brand"], value_cols=["Qty", "Share"])
+        month_order = view.drop_duplicates("Period").sort_values("PeriodDate")["Period"].tolist()
+        st.caption(
+            "Tahun-tahun lalu diringkas jadi satu titik rata-rata (**Rata2 20XX**) -- tahun berjalan "
+            "tetap per-bulan, biar fokus ke yang terbaru tanpa kehilangan histori sama sekali."
+        )
 
         st.subheader("Volume per bulan (KRT, estimasi dari cukai)")
-        pivot_qty = view.pivot_table(index="MonthKey", columns="Brand", values="Qty", aggfunc="sum")
+        pivot_qty = view.pivot_table(index="Period", columns="Brand", values="Qty", aggfunc="sum")
         pivot_qty = pivot_qty.reindex(month_order)
         st.bar_chart(pivot_qty)
 
         st.subheader("Pangsa pasar per bulan")
-        pivot_share = view.pivot_table(index="MonthKey", columns="Brand", values="Share", aggfunc="sum")
+        pivot_share = view.pivot_table(index="Period", columns="Brand", values="Share", aggfunc="sum")
         pivot_share = pivot_share.reindex(month_order)
         st.bar_chart(pivot_share)
 
@@ -133,9 +138,14 @@ with tab_detail:
             st.info("Tidak ada baris yang cocok.")
         else:
             st.caption(f"{len(picked_rows)} baris ditampilkan (dari {detail_df['Baris'].nunique()} total di sheet ini).")
+            st.caption(
+                "Tahun-tahun lalu diringkas jadi satu titik rata-rata (**Rata2 20XX**) -- tahun berjalan "
+                "tetap per-bulan."
+            )
 
-            pivot_qty = sub.pivot_table(index="Baris", columns="MonthKey", values="Qty", aggfunc="sum")
-            month_order = sub.drop_duplicates("MonthKey").sort_values("MonthDate")["MonthKey"].tolist()
+            sub = cp.collapse_past_years(sub, group_cols=["Baris", "IsTotal"], value_cols=["Qty", "Liter"])
+            pivot_qty = sub.pivot_table(index="Baris", columns="Period", values="Qty", aggfunc="sum")
+            month_order = sub.drop_duplicates("Period").sort_values("PeriodDate")["Period"].tolist()
             pivot_qty = pivot_qty.reindex(columns=month_order)
             pivot_qty = pivot_qty.reindex(index=[r for r in picked_rows if r in pivot_qty.index])
 
