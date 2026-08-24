@@ -261,10 +261,11 @@ def _transpose_progress():
             st.warning("Transpose dibatalkan.")
         elif proc.returncode == 0:
             # load_brand() di omset_seeker.py di-cache pakai functools.lru_cache TANPA
-            # TTL/expiry -- kalau tidak dibersihkan di sini, pencarian outlet di halaman
-            # lain (dalam sesi yang sama) bisa diam-diam tetap pakai data SEBELUM
-            # transpose ini. Ini titik yang paling tepat buat invalidate.
-            omset_seeker.load_brand.cache_clear()
+            # TTL/expiry + parquet disk cache di output/CACHE/ -- kalau tidak dibersihkan
+            # di sini, pencarian outlet di halaman lain (dalam sesi yang sama) bisa
+            # diam-diam tetap pakai data SEBELUM transpose ini. Ini titik yang paling
+            # tepat buat invalidate.
+            omset_seeker.clear_brand_cache()
             omset_seeker.load_gabungan_map.cache_clear()
             omset_seeker.load_horeka_gabungan_map.cache_clear()
             omset_seeker.get_cutoff_parts.cache_clear()

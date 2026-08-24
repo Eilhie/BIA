@@ -17,6 +17,7 @@ from openpyxl.styles import Border, Font, PatternFill, Side
 
 try:
     from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.collections import PatchCollection
     from matplotlib.figure import Figure
     from matplotlib.patches import Rectangle
     MATPLOTLIB_AVAILABLE = True
@@ -191,12 +192,25 @@ def _parse_krt(s: str) -> float:
     return float(s.replace(".", "").replace(",", "."))
 
 
-def build_report_excel(site: str, omshar_type: str = "UMUM", with_keg: bool = False) -> bytes:
+def build_report_excel(
+    site: str | None = None,
+    omshar_type: str = "UMUM",
+    with_keg: bool = False,
+    *,
+    precomputed: tuple | None = None,
+) -> bytes:
     """Bangun file .xlsx (bytes, siap di-download) dari data yang sama persis dengan
     tabel web/PNG. Reuse build_report_rows() lalu parse balik string terformat jadi
     angka asli (bukan hitung ulang dari nol) -- supaya RT2 26/BIR/BEV tidak pernah bisa
-    beda dari yang ditampilkan di web atau PNG."""
-    row_cells, info, cutoff = build_report_rows(site, omshar_type, with_keg)
+    beda dari yang ditampilkan di web atau PNG.
+
+    `precomputed` = tuple (row_cells, info, cutoff) dari build_report_rows() yang sudah
+    dihitung pemanggil -- dipakai omset_search_app.py supaya query data tidak diulang 3x
+    per tampilan (tabel + Excel + PNG). Kalau None, hitung sendiri (jalur CLI)."""
+    if precomputed is None:
+        row_cells, info, cutoff = build_report_rows(site, omshar_type, with_keg)
+    else:
+        row_cells, info, cutoff = precomputed
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -271,18 +285,12 @@ def build_report_excel(site: str, omshar_type: str = "UMUM", with_keg: bool = Fa
     return buf.getvalue()
 
 
-def render_outlet_report(
-    site: str, omshar_type: str = "UMUM", out_path: Path | None = None, with_keg: bool = False
-) -> Path:
-    if not MATPLOTLIB_AVAILABLE:
-        raise RuntimeError(
-            "matplotlib tidak bisa dimuat -- generate PNG tidak tersedia. Kemungkinan besar "
-            "diblokir Windows Smart App Control (cek Settings > Privacy & security > "
-            "Windows Security > App & browser control). Pencarian & tabel tetap bisa dipakai "
-            f"seperti biasa. Detail error asli: {_MATPLOTLIB_IMPORT_ERROR}"
-        )
-    row_cells, info, cutoff = build_report_rows(site, omshar_type, with_keg)
+def _build_figure(row_cells: list, info: dict, cutoff: str) -> Figure:
+    """Bangun figure matplotlib laporan OMSET (murni gambar, tanpa I/O).
 
+    Optimalisasi: semua Rectangle sel (~650) digabung dalam SATU PatchCollection --
+    path & urutan row-major sama, jumlah artist turun drastis sehingga build + savefig
+    jauh lebih cepat (hasil raster praktis identik, lihat catatan di bagian grid)."""
     n_data_rows = len(row_cells)
     n_grid_rows = 1 + n_data_rows  # header + data
 
@@ -331,43 +339,65 @@ def render_outlet_report(
     ax.text(cx, y, f"CUT OFF : {cutoff}", ha="center", va="center", fontsize=11,
             fontweight="bold", color="#D40000")
 
-    # ── Grid: header kolom ──
-    def draw_cell(col_idx, row_idx, text, facecolor, fontcolor="black", bold=False, fontsize=9.5):
+    # ── Latar + grid sel: tetap satu Rectangle per sel (bentuk & posisi sama persis
+    # dengan add_patch satu-satu), tapi digabung dalam SATU PatchCollection -- jumlah
+    # artist turun dari ~650 patch jadi 1, build + rasterisasi jauh lebih cepat.
+    # Urutan path tetap row-major seperti semula supaya kompositing edge hampir
+    # identik (selisih raster terukur cuma ~100 px anti-aliasing delta <=6 di sudut
+    # garis tepi tabel, tidak terlihat mata). ──
+    def header_bg(col_idx):
+        if col_idx < 12:
+            return C_HEADER_25
+        if col_idx == 12:
+            return C_HEADER_RT2_25
+        if col_idx == BRAND_COL_IDX:
+            return C_HEADER_BRAND
+        if col_idx == N_COLS - 1:
+            return C_HEADER_RT2_26
+        return C_HEADER_26
+
+    def cell_bg(col_idx, row_type):
+        if row_type != "normal":
+            return ROW_BG[row_type]
+        if col_idx == 12:
+            return C_CELL_RT2_25
+        if col_idx == BRAND_COL_IDX:
+            return C_CELL_BRAND
+        if col_idx == N_COLS - 1:
+            return C_CELL_RT2_26
+        return "white"
+
+    rects, colors = [], []
+    for col_idx in range(N_COLS):
+        rects.append(Rectangle((x_edges[col_idx], 0), COL_WIDTHS[col_idx], row_h))
+        colors.append(header_bg(col_idx))
+    for r, (vals_25, rt2_25, brand, vals_26, rt2_26, row_type) in enumerate(row_cells, start=1):
+        for col_idx in range(N_COLS):
+            rects.append(Rectangle((x_edges[col_idx], r), COL_WIDTHS[col_idx], row_h))
+            colors.append(cell_bg(col_idx, row_type))
+    ax.add_collection(PatchCollection(rects, facecolors=colors, edgecolors=C_GRID, linewidths=0.6))
+
+    # ── Teks sel ──
+    def cell_text(col_idx, row_idx, text, fontcolor="black", bold=False, fontsize=9.5):
         x0 = x_edges[col_idx]
         w = COL_WIDTHS[col_idx]
         y0 = row_idx * row_h
-        ax.add_patch(Rectangle((x0, y0), w, row_h, facecolor=facecolor,
-                                edgecolor=C_GRID, linewidth=0.6))
         ax.text(x0 + w / 2, y0 + row_h / 2, text, ha="center", va="center",
                 fontsize=fontsize, color=fontcolor, fontweight="bold" if bold else "normal")
 
     for col_idx, label in enumerate(COL_LABELS):
-        if col_idx < 12:
-            bg = C_HEADER_25
-        elif col_idx == 12:
-            bg = C_HEADER_RT2_25
-        elif col_idx == BRAND_COL_IDX:
-            bg = C_HEADER_BRAND
-        elif col_idx == N_COLS - 1:
-            bg = C_HEADER_RT2_26
-        else:
-            bg = C_HEADER_26
         fontcolor = "white" if col_idx in (12, N_COLS - 1) else "black"
-        draw_cell(col_idx, 0, label, bg, fontcolor=fontcolor, bold=True, fontsize=8)
+        cell_text(col_idx, 0, label, fontcolor, bold=True, fontsize=8)
 
-    # ── Grid: data rows ──
     for r, (vals_25, rt2_25, brand, vals_26, rt2_26, row_type) in enumerate(row_cells, start=1):
-        bg = ROW_BG[row_type]
         fontcolor = "white" if row_type == "divab1" else "black"
         for c, v in enumerate(vals_25):
-            draw_cell(c, r, v, bg, fontcolor=fontcolor, fontsize=7.5)
-        draw_cell(12, r, rt2_25, bg if row_type != "normal" else C_CELL_RT2_25, fontcolor=fontcolor, fontsize=7.5)
-        draw_cell(BRAND_COL_IDX, r, brand, bg if row_type != "normal" else C_CELL_BRAND,
-                  fontcolor=fontcolor, bold=True, fontsize=8)
+            cell_text(c, r, v, fontcolor=fontcolor, fontsize=7.5)
+        cell_text(12, r, rt2_25, fontcolor=fontcolor, fontsize=7.5)
+        cell_text(BRAND_COL_IDX, r, brand, fontcolor=fontcolor, bold=True, fontsize=8)
         for i, v in enumerate(vals_26):
-            c = BRAND_COL_IDX + 1 + i
-            draw_cell(c, r, v, bg, fontcolor=fontcolor, fontsize=7.5)
-        draw_cell(N_COLS - 1, r, rt2_26, bg if row_type != "normal" else C_CELL_RT2_26, fontcolor=fontcolor, fontsize=7.5)
+            cell_text(BRAND_COL_IDX + 1 + i, r, v, fontcolor=fontcolor, fontsize=7.5)
+        cell_text(N_COLS - 1, r, rt2_26, fontcolor=fontcolor, fontsize=7.5)
 
     # ── Footer: alamat ──
     fy = grid_bottom_y + footer_text_h * 0.6
@@ -375,22 +405,27 @@ def render_outlet_report(
         ax.text(cx, fy, label, ha="center", va="center", fontsize=9)
         fy += footer_text_h
 
-    if out_path is None:
-        safe_name = "".join(c for c in f"{info['Site']} {info['Outlet']}" if c not in '\\/:*?"<>|')
-        out_path = OUTPUT_DIR / f"{safe_name}.png"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    # tidak perlu plt.close(fig) -- fig dibuat lewat Figure() langsung, tidak
+    # pernah terdaftar di registry global pyplot, jadi tidak ada yang perlu
+    # dibersihkan di sana. Cukup dibiarkan di-garbage-collect begitu fig keluar scope.
+    return fig
 
+
+def _save_fig_bytes(fig: Figure) -> bytes:
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=200, bbox_inches="tight", pad_inches=0.2, facecolor="white")
+    return buf.getvalue()
+
+
+def _write_bytes_atomic(out_path: Path, data: bytes) -> None:
     # Tulis ke file sementara dulu, baru os.replace() ke nama final (atomic) --
-    # kalau langsung fig.savefig(out_path) dan ada 2 request nge-render outlet yang
+    # kalau langsung tulis ke nama final dan ada 2 request nge-render outlet yang
     # sama bersamaan (mis. 2 tab browser), tulisan byte dari keduanya bisa kebentur
     # di file yang sama dan hasilnya PNG korup/garbled ("burik", nimpa dobel).
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = out_path.with_name(f".{out_path.stem}.{uuid.uuid4().hex}.tmp.png")
     try:
-        fig.savefig(tmp_path, dpi=200, bbox_inches="tight", pad_inches=0.2, facecolor="white")
-        # tidak perlu plt.close(fig) -- fig dibuat lewat Figure() langsung, tidak
-        # pernah terdaftar di registry global pyplot, jadi tidak ada yang perlu
-        # dibersihkan di sana. Cukup dibiarkan di-garbage-collect begitu fig keluar scope.
-        #
+        tmp_path.write_bytes(data)
         # os.replace() bisa gagal SESAAT dengan PermissionError (WinError 32,
         # "process cannot access the file") kalau file .tmp yang baru saja
         # ditulis masih sempat dikunci sebentar oleh proses lain -- paling
@@ -402,7 +437,7 @@ def render_outlet_report(
         for attempt in range(6):
             try:
                 os.replace(tmp_path, out_path)
-                break
+                return
             except PermissionError:
                 if attempt == 5:
                     raise
@@ -410,11 +445,46 @@ def render_outlet_report(
     finally:
         tmp_path.unlink(missing_ok=True)
 
-    return out_path
+
+def render_outlet_report(
+    site: str | None = None,
+    omshar_type: str = "UMUM",
+    out_path: Path | None = None,
+    with_keg: bool = False,
+    *,
+    precomputed: tuple | None = None,
+) -> tuple[Path, bytes]:
+    """Render PNG laporan outlet. Kembalikan (path_file, png_bytes) -- bytes dipakai
+    langsung oleh web app (tanpa baca ulang file dari disk), file tetap ditulis ke
+    output/IMAGE/ seperti sebelumnya.
+
+    `precomputed` = tuple (row_cells, info, cutoff) dari build_report_rows() yang sudah
+    dihitung pemanggil -- dipakai omset_search_app.py supaya query data tidak diulang 3x
+    per tampilan (tabel + Excel + PNG). Kalau None, hitung sendiri (jalur CLI)."""
+    if not MATPLOTLIB_AVAILABLE:
+        raise RuntimeError(
+            "matplotlib tidak bisa dimuat -- generate PNG tidak tersedia. Kemungkinan besar "
+            "diblokir Windows Smart App Control (cek Settings > Privacy & security > "
+            "Windows Security > App & browser control). Pencarian & tabel tetap bisa dipakai "
+            f"seperti biasa. Detail error asli: {_MATPLOTLIB_IMPORT_ERROR}"
+        )
+    if precomputed is None:
+        row_cells, info, cutoff = build_report_rows(site, omshar_type, with_keg)
+    else:
+        row_cells, info, cutoff = precomputed
+
+    png_bytes = _save_fig_bytes(_build_figure(row_cells, info, cutoff))
+
+    if out_path is None:
+        safe_name = "".join(c for c in f"{info['Site']} {info['Outlet']}" if c not in '\\/:*?"<>|')
+        out_path = OUTPUT_DIR / f"{safe_name}.png"
+    _write_bytes_atomic(out_path, png_bytes)
+
+    return out_path, png_bytes
 
 
 if __name__ == "__main__":
     site = input("Site number: ").strip()
     group = input("Grup [UMUM/HOREKA, default UMUM]: ").strip().upper() or "UMUM"
-    path = render_outlet_report(site, group)
+    path, _ = render_outlet_report(site, group)
     print(f"Tersimpan: {path}")

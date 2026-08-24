@@ -154,10 +154,17 @@ else:
     if lapisan_filter:
         view = view[view["Lapisan"].isin(lapisan_filter)]
 
+    current_month = mp.current_month_key()
+
     base_cols = ["Site", "Wil"]
     if category == "HOREKA":
         base_cols.append("Grup")
     base_cols += ["Cust", "Strata", "Lapisan", "RT2_25"]
+    if current_month in view.columns:
+        base_cols.append(current_month)
+        st.caption(f"Kolom **{current_month}** = omset bulan berjalan, biasanya belum lengkap sampai RAW berikutnya masuk.")
+    else:
+        st.info(f"Kolom bulan berjalan ({current_month}) belum ada di archive -- upload RAW terbaru untuk menampilkannya.")
     display_cols = [c for c in base_cols + list(METRIC_LABELS.keys()) if c in view.columns]
 
     st.caption(f"{len(view)} outlet ditemukan (dari {len(result)} total).")
@@ -177,7 +184,7 @@ else:
             shown[col] = shown[col].apply(lambda v: f"{v * 100:.0f}%" if pd.notna(v) else "-")
 
     # Angka KRT dibulatkan 2 desimal, format Indonesia (koma sbg desimal).
-    for col in NUM_COLS:
+    for col in NUM_COLS + [current_month]:
         if col in shown.columns:
             shown[col] = shown[col].apply(_fmt_num)
 
