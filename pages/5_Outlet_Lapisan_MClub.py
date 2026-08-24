@@ -12,8 +12,25 @@ import streamlit as st
 
 import auth
 import mclub_pipeline as mp
+from render_outlet_image import build_html_table, build_report_rows
 
 auth.require_level(4, page="Outlet Lapisan (MClub)")
+
+
+@st.dialog("Omset Seeker")
+def _show_omset_seeker_modal(site: str, omshar_type: str, outlet_name: str) -> None:
+    """Reuse jalur render yang sama dengan halaman Omset Seeker (build_report_rows +
+    build_html_table) supaya tabelnya persis sama, bukan hitung ulang dengan cara lain."""
+    st.subheader(f"{outlet_name}")
+    st.caption(site)
+    try:
+        with st.spinner("Memuat data Omset Seeker..."):
+            row_cells, info, cutoff = build_report_rows(site, omshar_type)
+    except ValueError as e:
+        st.error(f"Tidak ada data Omset Seeker: {e}")
+        return
+    st.caption(f"Wilayah: {info.get('Wilayah', '-')} | Cut off: {cutoff}")
+    st.markdown(build_html_table(row_cells), unsafe_allow_html=True)
 st.title("Outlet Lapisan (MClub)")
 st.caption(
     "Klasifikasi tier outlet (Gold/Platinum/MCLUB) + analisis kompetitif, dihitung "
@@ -196,14 +213,24 @@ else:
             return [""] * len(col_series)
         return [_pct_tier_css(raw.loc[idx]) for idx in col_series.index]
 
+    st.caption("Klik satu baris untuk lihat detail Omset Seeker outlet itu.")
     try:
-        st.dataframe(
+        event = st.dataframe(
             shown.style.apply(_style_pct_col, subset=list(raw_pct.keys()), axis=0),
             use_container_width=True, hide_index=True,
+            on_select="rerun", selection_mode="single-row",
         )
     except Exception:
         # fallback kalau styling tidak didukung versi Streamlit ini
-        st.dataframe(shown, use_container_width=True, hide_index=True)
+        event = st.dataframe(
+            shown, use_container_width=True, hide_index=True,
+            on_select="rerun", selection_mode="single-row",
+        )
+
+    selected_rows = event.selection.rows if event is not None else []
+    if selected_rows:
+        picked = shown.iloc[selected_rows[0]]
+        _show_omset_seeker_modal(picked["Site"], category, picked["Cust"])
 
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
