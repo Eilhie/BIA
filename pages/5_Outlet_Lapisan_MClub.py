@@ -103,27 +103,32 @@ if st.session_state.get("mclub_confirm_seed") == category:
         st.rerun()
 
 st.divider()
-st.subheader("2. Proses file RAW baru")
+st.subheader("2. Update dari RAW (otomatis)")
 st.caption(
-    "Upload file RAW dari divisi lain -- bulan baru ditambahkan ke archive, "
-    "bulan yang tumpang tindih (biasanya 1-2 bulan terakhir) ditimpa versi terbaru."
+    f"Dicek langsung dari folder `{mp.RAW_DIR}` -- kalau divisi lain naruh file baru di situ, "
+    "otomatis kegabung ke archive tanpa perlu upload manual."
 )
 
-uploaded = st.file_uploader(f"Upload RAW {category} (.xlsx)", type=["xlsx"], key="mclub_upload")
-if uploaded is not None and st.button("Proses RAW ini", type="primary", key="mclub_process"):
-    with st.spinner("Membaca & menggabungkan ke archive..."):
-        parser = mp.parse_raw_umum if category == "UMUM" else mp.parse_raw_horeka
-        try:
-            raw_df = parser(uploaded)
-        except ValueError as e:
-            st.error(f"Gagal baca file RAW: {e}")
-            raw_df = None
-        if raw_df is not None:
-            archive = mp.load_archive(category)
-            merged = mp.merge_into_archive(archive, raw_df)
-            mp.save_archive(merged, category)
-            st.success(f"RAW diproses: {len(raw_df)} baris digabung, total archive sekarang {len(merged)} outlet.")
-            st.rerun()
+st.button("Cek update sekarang", key="mclub_check_btn")  # klik = rerun = cek ulang di bawah
+
+with st.spinner("Mengecek folder RAW..."):
+    try:
+        raw_status = mp.check_and_process_raw(category)
+    except ValueError as e:
+        raw_status = {"found": True, "error": str(e)}
+
+if not raw_status.get("found"):
+    st.warning(f"Folder RAW tidak ditemukan atau kosong untuk {category}: `{mp.RAW_DIR}`")
+elif raw_status.get("error"):
+    st.error(f"Gagal baca file RAW terbaru: {raw_status['error']}")
+elif raw_status.get("processed_now"):
+    st.success(
+        f"RAW baru terdeteksi dan diproses: `{raw_status['file'].name}` -- "
+        f"{raw_status['rows']} baris digabung, total archive sekarang {raw_status['total_archive']} outlet."
+    )
+else:
+    mtime_str = pd.Timestamp(raw_status["mtime"], unit="s").strftime("%d %b %Y %H:%M")
+    st.caption(f"Sudah up to date -- RAW terakhir: `{raw_status['file'].name}` ({mtime_str}).")
 
 st.divider()
 st.subheader("3. Lihat & cari hasil")

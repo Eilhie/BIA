@@ -24,6 +24,8 @@ sync_log.txt
 scheduled_tasks.lock
 SKU_Terlewat.txt
 **/SKU_Terlewat.txt
+last_processed_*.txt
+**/last_processed_*.txt
 
 # Stray artifact (accidental file, not real output)
 /CSV

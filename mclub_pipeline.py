@@ -29,11 +29,89 @@ import pandas as pd
 
 ARCHIVE_DIR = Path(__file__).resolve().parent / "mclub_pipeline"
 ARCHIVE_PATH = {"UMUM": ARCHIVE_DIR / "archive_umum.csv", "HOREKA": ARCHIVE_DIR / "archive_horeka.csv"}
+_LAST_PROCESSED_PATH = {
+    "UMUM": ARCHIVE_DIR / "last_processed_umum.txt",
+    "HOREKA": ARCHIVE_DIR / "last_processed_horeka.txt",
+}
 
 WORKING_FILE = {
     "UMUM": Path(r"D:\OUTLET MCLUB PLATINUM GOLD\List Outlet G P Mc Umum.xlsx"),
     "HOREKA": Path(r"D:\OUTLET MCLUB PLATINUM GOLD\List Outlet G P Mc Horeka.xlsx"),
 }
+
+# Folder tempat divisi lain naruh file RAW terbaru -- dicek langsung tiap
+# halaman dibuka (lihat check_and_process_raw()), TIDAK perlu upload manual
+# lagi. Tidak ada tanggal di nama filenya (beda dari Toko Gabungan), jadi
+# deteksi kategori pakai kata "horeka" di nama file, dan "sudah baru atau
+# belum" pakai waktu modifikasi file (bukan isi) -- folder ini sifatnya
+# drop-only dari divisi lain, bukan folder kerja bersama yang sering dibuka-
+# tutup orang, jadi risiko mtime palsu (seperti kasus Toko Gabungan) kecil.
+RAW_DIR = Path(r"D:\OUTLET MCLUB PLATINUM GOLD\RAW")
+
+
+def find_latest_raw(category: str) -> Path | None:
+    """Cari file RAW terbaru (by mtime) di RAW_DIR untuk kategori ini -- file
+    HOREKA dikenali lewat kata 'horeka' di nama file (case-insensitive), sisanya
+    dianggap UMUM."""
+    if not RAW_DIR.exists():
+        return None
+    candidates = []
+    for p in RAW_DIR.glob("*.xlsx"):
+        if p.name.startswith("~$"):
+            continue
+        is_horeka = "horeka" in p.name.lower()
+        if (category == "HOREKA") != is_horeka:
+            continue
+        candidates.append(p)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda p: p.stat().st_mtime)
+
+
+def _load_last_processed_mtime(category: str) -> float | None:
+    path = _LAST_PROCESSED_PATH[category]
+    if not path.exists():
+        return None
+    try:
+        return float(path.read_text(encoding="utf-8").strip())
+    except (ValueError, OSError):
+        return None
+
+
+def _save_last_processed_mtime(category: str, mtime: float) -> None:
+    path = _LAST_PROCESSED_PATH[category]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(repr(mtime), encoding="utf-8")
+
+
+def check_and_process_raw(category: str) -> dict:
+    """Cek RAW_DIR, proses otomatis kalau ada file baru (mtime lebih baru dari
+    yang terakhir diproses) -- aman dipanggil di setiap rerun halaman Streamlit,
+    karena kalau file belum berubah cuma stat() murah, TIDAK baca ulang file
+    Excel-nya (yang bisa puluhan MB). Return dict status buat ditampilkan di UI."""
+    path = find_latest_raw(category)
+    if path is None:
+        return {"found": False}
+
+    mtime = path.stat().st_mtime
+    last_mtime = _load_last_processed_mtime(category)
+    status = {"found": True, "file": path, "mtime": mtime, "processed_now": False}
+
+    if last_mtime is not None and mtime <= last_mtime:
+        status["already_current"] = True
+        return status
+
+    parser = parse_raw_umum if category == "UMUM" else parse_raw_horeka
+    raw_df = parser(path)
+    archive = load_archive(category)
+    merged = merge_into_archive(archive, raw_df)
+    save_archive(merged, category)
+    _save_last_processed_mtime(category, mtime)
+
+    status["processed_now"] = True
+    status["rows"] = len(raw_df)
+    status["total_archive"] = len(merged)
+    return status
 
 # Semester yang jadi acuan SMT2/SMT1 saat ini -- sama seperti file kerja yang
 # ada sekarang (SMT2 25_BIR = Jul-Des 2025, SMT1 26_BIR = Jan-Jun 2026). Ini
