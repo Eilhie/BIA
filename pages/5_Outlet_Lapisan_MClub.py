@@ -14,7 +14,8 @@ import auth
 import mclub_pipeline as mp
 from render_outlet_image import build_html_table, build_report_rows
 
-auth.require_level(4, page="Outlet Lapisan (MClub)")
+current_user = auth.require_level(4, page="Outlet Lapisan (MClub)")
+is_admin = current_user["level"] >= 5
 
 
 @st.dialog("Omset Seeker", width="large")
@@ -81,52 +82,57 @@ def _pct_tier_css(v) -> str:
 
 category = st.radio("Kategori", ["UMUM", "HOREKA"], horizontal=True, key="mclub_cat")
 
-st.divider()
-st.subheader("1. Seed archive dari file kerja lama (sekali saja)")
-st.caption(
-    f"Import histori dari `{mp.WORKING_FILE[category].name}` yang sudah ada -- "
-    "sekali jalan di awal biar riwayat bulan-bulan lama tidak hilang."
-)
-
-existing = mp.load_archive(category)
-
-if st.button("Import dari file kerja lama", key="seed_btn"):
-    if not existing.empty:
-        st.session_state["mclub_confirm_seed"] = category
-    else:
-        with st.spinner("Membaca file kerja (ukurannya besar, bisa lambat)..."):
-            seeded = mp.seed_archive_from_working_file(category)
-            mp.save_archive(seeded, category)
-        st.success(f"Archive diisi dari file kerja: {len(seeded)} outlet.")
-        st.rerun()
-
-if st.session_state.get("mclub_confirm_seed") == category:
-    st.warning(
-        f"Archive {category} sudah punya {len(existing)} outlet. Import ulang dari file kerja "
-        "bisa TIMPA data yang lebih baru (kalau sudah pernah proses RAW terbaru) dengan data "
-        "lama dari file kerja. Yakin lanjut?"
+# Sinkronisasi (RAW + OMSHAR bulan berjalan) tetap jalan otomatis buat SEMUA orang
+# yang buka halaman ini, admin atau bukan -- cuma KONTROL manual (seed dari file
+# kerja, tombol cek update, pesan status) yang disembunyikan dari non-admin di
+# bawah, sesuai permintaan: non-admin cuma boleh lihat tabel & data, tidak boleh
+# ada tombol upload/proses apa pun.
+if is_admin:
+    st.divider()
+    st.subheader("1. Seed archive dari file kerja lama (sekali saja)")
+    st.caption(
+        f"Import histori dari `{mp.WORKING_FILE[category].name}` yang sudah ada -- "
+        "sekali jalan di awal biar riwayat bulan-bulan lama tidak hilang."
     )
-    c1, c2 = st.columns(2)
-    if c1.button("Ya, gabung dengan file kerja", key="seed_confirm_yes"):
-        with st.spinner("Membaca file kerja..."):
-            seeded = mp.seed_archive_from_working_file(category)
-            merged = mp.merge_into_archive(existing, seeded)
-            mp.save_archive(merged, category)
-        del st.session_state["mclub_confirm_seed"]
-        st.success(f"Archive diperbarui: {len(merged)} outlet.")
-        st.rerun()
-    if c2.button("Batal", key="seed_confirm_no"):
-        del st.session_state["mclub_confirm_seed"]
-        st.rerun()
 
-st.divider()
-st.subheader("2. Update dari RAW (otomatis)")
-st.caption(
-    f"Dicek langsung dari folder `{mp.RAW_DIR}` -- kalau divisi lain naruh file baru di situ, "
-    "otomatis kegabung ke archive tanpa perlu upload manual."
-)
+    existing = mp.load_archive(category)
 
-st.button("Cek update sekarang", key="mclub_check_btn")  # klik = rerun = cek ulang di bawah
+    if st.button("Import dari file kerja lama", key="seed_btn"):
+        if not existing.empty:
+            st.session_state["mclub_confirm_seed"] = category
+        else:
+            with st.spinner("Membaca file kerja (ukurannya besar, bisa lambat)..."):
+                seeded = mp.seed_archive_from_working_file(category)
+                mp.save_archive(seeded, category)
+            st.success(f"Archive diisi dari file kerja: {len(seeded)} outlet.")
+            st.rerun()
+
+    if st.session_state.get("mclub_confirm_seed") == category:
+        st.warning(
+            f"Archive {category} sudah punya {len(existing)} outlet. Import ulang dari file kerja "
+            "bisa TIMPA data yang lebih baru (kalau sudah pernah proses RAW terbaru) dengan data "
+            "lama dari file kerja. Yakin lanjut?"
+        )
+        c1, c2 = st.columns(2)
+        if c1.button("Ya, gabung dengan file kerja", key="seed_confirm_yes"):
+            with st.spinner("Membaca file kerja..."):
+                seeded = mp.seed_archive_from_working_file(category)
+                merged = mp.merge_into_archive(existing, seeded)
+                mp.save_archive(merged, category)
+            del st.session_state["mclub_confirm_seed"]
+            st.success(f"Archive diperbarui: {len(merged)} outlet.")
+            st.rerun()
+        if c2.button("Batal", key="seed_confirm_no"):
+            del st.session_state["mclub_confirm_seed"]
+            st.rerun()
+
+    st.divider()
+    st.subheader("2. Update dari RAW (otomatis)")
+    st.caption(
+        f"Dicek langsung dari folder `{mp.RAW_DIR}` -- kalau divisi lain naruh file baru di situ, "
+        "otomatis kegabung ke archive tanpa perlu upload manual."
+    )
+    st.button("Cek update sekarang", key="mclub_check_btn")  # klik = rerun = cek ulang di bawah
 
 with st.spinner("Mengecek folder RAW..."):
     try:
@@ -134,34 +140,37 @@ with st.spinner("Mengecek folder RAW..."):
     except ValueError as e:
         raw_status = {"found": True, "error": str(e)}
 
-if not raw_status.get("found"):
-    st.warning(f"Folder RAW tidak ditemukan atau kosong untuk {category}: `{mp.RAW_DIR}`")
-elif raw_status.get("error"):
-    st.error(f"Gagal baca file RAW terbaru: {raw_status['error']}")
-elif raw_status.get("processed_now"):
-    st.success(
-        f"RAW baru terdeteksi dan diproses: `{raw_status['file'].name}` -- "
-        f"{raw_status['rows']} baris digabung, total archive sekarang {raw_status['total_archive']} outlet."
-    )
-else:
-    mtime_str = pd.Timestamp(raw_status["mtime"], unit="s").strftime("%d %b %Y %H:%M")
-    st.caption(f"Sudah up to date -- RAW terakhir: `{raw_status['file'].name}` ({mtime_str}).")
-
 with st.spinner("Menyinkronkan bulan berjalan dari OMSHAR..."):
     omshar_status = mp.sync_current_month_from_omshar(category)
-if omshar_status.get("pulled"):
-    src = "diperbarui" if omshar_status.get("changed") else "sudah sama"
-    st.caption(
-        f"Kolom bulan berjalan (**{omshar_status['month']}**) ditarik langsung dari OMSHAR -- {src}, "
-        "tidak perlu nunggu RAW turun untuk bulan ini."
-    )
+
+if is_admin:
+    if not raw_status.get("found"):
+        st.warning(f"Folder RAW tidak ditemukan atau kosong untuk {category}: `{mp.RAW_DIR}`")
+    elif raw_status.get("error"):
+        st.error(f"Gagal baca file RAW terbaru: {raw_status['error']}")
+    elif raw_status.get("processed_now"):
+        st.success(
+            f"RAW baru terdeteksi dan diproses: `{raw_status['file'].name}` -- "
+            f"{raw_status['rows']} baris digabung, total archive sekarang {raw_status['total_archive']} outlet."
+        )
+    else:
+        mtime_str = pd.Timestamp(raw_status["mtime"], unit="s").strftime("%d %b %Y %H:%M")
+        st.caption(f"Sudah up to date -- RAW terakhir: `{raw_status['file'].name}` ({mtime_str}).")
+
+    if omshar_status.get("pulled"):
+        src = "diperbarui" if omshar_status.get("changed") else "sudah sama"
+        st.caption(
+            f"Kolom bulan berjalan (**{omshar_status['month']}**) ditarik langsung dari OMSHAR -- {src}, "
+            "tidak perlu nunggu RAW turun untuk bulan ini."
+        )
 
 st.divider()
-st.subheader("3. Lihat & cari hasil")
+st.subheader("3. Lihat & cari hasil" if is_admin else "Hasil")
 
 archive = mp.load_archive(category)
 if archive.empty:
-    st.info("Archive masih kosong. Lakukan langkah 1 atau 2 dulu.")
+    msg = "Archive masih kosong. Lakukan langkah 1 atau 2 dulu." if is_admin else "Data belum tersedia untuk kategori ini."
+    st.info(msg)
 else:
     result = mp.compute_metrics(archive, category=category)
 
