@@ -28,30 +28,32 @@ st.set_page_config(page_title="OMSET Seeker", layout="wide")
 
 user = auth.get_current_user()
 
-# (path relatif ke file ini, judul di menu & tab browser, jadikan default landing page)
+# (section buat grouping di sidebar, path relatif ke file ini, judul di menu &
+# tab browser, jadikan default landing page)
 PAGE_DEFS = [
-    ("omset_search_app.py", "Omset Seeker", True),
-    ("pages/0_Dashboard.py", "Dashboard", False),
-    ("pages/2_SKU_Manifest.py", "SKU Manifest", False),
-    ("pages/5_Outlet_Lapisan_MClub.py", "Outlet Lapisan MClub", False),
-    ("pages/6_Cek_Cutoff_OMSHAR.py", "Cek Cutoff OMSHAR", False),
-    ("pages/7_Detail_SKU_Brand_Besar.py", "Detail SKU Brand Besar", False),
-    ("pages/3_Cek_Klaim_SKU.py", "Cek Klaim SKU", False),
-    ("pages/4_Atur_SKU_Sync.py", "Atur SKU Sync", False),
-    ("pages/1_Sync_dan_Transpose.py", "Sync dan Transpose", False),
-    ("pages/8_Kelola_User.py", "Kelola User", False),
-    ("pages/9_Audit_Trail.py", "Audit Trail", False),
-    ("pages/10_Atur_Gabungan_HOREKA.py", "Gabungan HOREKA", False),
-    ("pages/11_EAO_Sync.py", "EAO Sync", False),
+    ("Utama", "omset_search_app.py", "Omset Seeker", True),
+    ("Utama", "pages/5_Outlet_Lapisan_MClub.py", "Outlet Lapisan MClub", False),
+    ("Utama", "pages/3_Cek_Klaim_SKU.py", "Cek Klaim SKU", False),
+    ("Utama", "pages/7_Detail_SKU_Brand_Besar.py", "Detail SKU Brand Besar", False),
+    ("Utama", "pages/0_Dashboard.py", "Dashboard", False),
+    ("Utama", "pages/2_SKU_Manifest.py", "SKU Manifest", False),
+
+    ("Sinkronisasi & Data", "pages/1_Sync_dan_Transpose.py", "Sync dan Transpose", False),
+    ("Sinkronisasi & Data", "pages/11_EAO_Sync.py", "EAO Sync", False),
+    ("Sinkronisasi & Data", "pages/4_Atur_SKU_Sync.py", "Atur SKU Sync", False),
+    ("Sinkronisasi & Data", "pages/10_Atur_Gabungan_HOREKA.py", "Gabungan HOREKA", False),
+    ("Sinkronisasi & Data", "pages/6_Cek_Cutoff_OMSHAR.py", "Cek Cutoff OMSHAR", False),
+
+    ("Admin", "pages/8_Kelola_User.py", "Kelola User", False),
+    ("Admin", "pages/9_Audit_Trail.py", "Audit Trail", False),
 ]
 
-visible_pages = [
-    st.Page(path, title=title, default=is_default)
-    for path, title, is_default in PAGE_DEFS
-    if user["level"] >= auth.PAGE_LEVELS.get(path, 99)
-]
+sections: dict[str, list[st.Page]] = {}
+for section, path, title, is_default in PAGE_DEFS:
+    if user["level"] >= auth.PAGE_LEVELS.get(path, 99):
+        sections.setdefault(section, []).append(st.Page(path, title=title, default=is_default))
 
-if not visible_pages:
+if not sections:
     # st.navigation() error keras kalau daftarnya kosong -- bisa kejadian
     # nyata kalau Admin set level user ke 0 tanpa menonaktifkan akunnya
     # (dua hal beda: level 0 vs active=0), jadi TIDAK boleh dianggap "tidak
@@ -60,5 +62,5 @@ if not visible_pages:
     st.error(f"Akun **{user['username']}** (Level 0) belum diberi akses ke halaman manapun. Hubungi Admin.")
     st.stop()
 
-nav = st.navigation(visible_pages)
+nav = st.navigation(sections)
 nav.run()
