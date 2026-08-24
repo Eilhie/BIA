@@ -107,12 +107,12 @@ def build_html_table(df: pd.DataFrame, title: str) -> str:
         for c in id_cols:
             v = row[c] if pd.notna(row[c]) else ""
             cells += (
-                f'<td style="background:{row_bg};padding:4px 8px;text-align:left;'
+                f'<td style="background:{row_bg};color:#000;padding:4px 8px;text-align:left;'
                 f'border:1px solid #ccc;font-weight:bold;white-space:nowrap;">{v}</td>'
             )
         for c in value_cols:
             cells += (
-                f'<td style="background:{row_bg};padding:4px 8px;text-align:right;'
+                f'<td style="background:{row_bg};color:#000;padding:4px 8px;text-align:right;'
                 f'border:1px solid #ccc;white-space:nowrap;">{_fmt_cell(c, row[c])}</td>'
             )
         body_rows.append(f"<tr>{cells}</tr>")
