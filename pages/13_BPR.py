@@ -12,6 +12,11 @@ Tampilan + warna kolom (DATA kuning, PROPOSED ORDER hijau/oranye, TOTAL
 merah, ACTUAL ORDER/% gelap) meniru PERSIS template Excel asli -- lihat
 render_bpr.py. Export Excel & PDF juga sama persis warnanya.
 
+Kolom "TOTAL <tanggal>" (perbandingan TOTAL hari kerja sebelumnya) juga
+direplikasi -- tapi dihitung ULANG dari raw file historis LANGSUNG (lihat
+bp.find_previous_raw()), bukan lewat external link manual seperti template
+asli yang terbukti sering telat beberapa hari.
+
 Catatan: sheet 'Rekap Per WILAYAH' di template asli punya satu kolom
 tambahan (F, tanpa header) yang formulanya salah-referensi (AVERAGEIFS
 DOI per-Depo dari sheet lain, dicocokkan lewat NOMOR BARIS bukan nama
@@ -35,6 +40,16 @@ def get_rekap() -> tuple[pd.DataFrame, pd.DataFrame, str] | None:
     raw = bp.load_raw(path)
     depo = bp.compute_rekap_depo(raw)
     wilayah = bp.compute_rekap_wilayah(raw, depo)
+
+    prev_path = bp.find_previous_raw(path)
+    if prev_path is not None:
+        prev_raw = bp.load_raw(prev_path)
+        prev_depo = bp.compute_rekap_depo(prev_raw)
+        prev_wilayah = bp.compute_rekap_wilayah(prev_raw, prev_depo)
+        label = bp.previous_total_label(prev_path)
+        depo = bp.add_previous_total(depo, ["Wilayah", "Depo"], prev_depo, label)
+        wilayah = bp.add_previous_total(wilayah, ["Wilayah"], prev_wilayah, label)
+
     return depo, wilayah, path.name
 
 

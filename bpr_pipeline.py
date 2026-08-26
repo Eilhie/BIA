@@ -57,6 +57,30 @@ def find_latest_raw() -> Path | None:
         return None
     return max(candidates, key=lambda x: x[0])[1]
 
+
+def find_previous_raw(current: Path) -> Path | None:
+    """Cari raw file PALING BARU SEBELUM `current` -- dipakai buat kolom
+    perbandingan 'TOTAL <tanggal>' (hari kerja sebelumnya yang datanya ada,
+    otomatis lompat weekend/hari libur kalau memang tidak ada laporan).
+
+    Template asli punya kolom sejenis ('TOTAL 15 MAY 2026' dst.) tapi lewat
+    external link Excel yang di-relink manual -- terbukti nyata sering telat
+    beberapa hari (lihat memory/commit history). Ini baca raw file historis
+    LANGSUNG, jadi selalu akurat tanpa perlu relink apa pun."""
+    m_cur = _RAW_NAME_RE.match(current.name)
+    if m_cur is None or not KIRIM_DIR.exists():
+        return None
+    cur_ts = m_cur.group(1)
+    candidates = []
+    for p in KIRIM_DIR.rglob("BPR_BIA-*.xls"):
+        m = _RAW_NAME_RE.match(p.name)
+        if m and m.group(1) < cur_ts:
+            candidates.append((m.group(1), p))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda x: x[0])[1]
+
+
 # Urutan & nama brand PERSIS header kolom H4:Q4 di "Rekap Per DEPO" template
 # -- kalau brand baru ditambahkan di raw data tapi belum ada di sini, dia
 # tidak akan muncul di kolom manapun (sama seperti Excel: SUMIFS kriteria
@@ -191,3 +215,29 @@ def compute_rekap_wilayah(raw: pd.DataFrame, rekap_depo: pd.DataFrame) -> pd.Dat
         rows.append(total)
 
     return pd.DataFrame(rows)
+
+
+_MONTH_ABBR_ID = ["", "Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
+
+
+def previous_total_label(prev_path: Path) -> str:
+    """'BPR_BIA-20260824070100.xls' -> 'TOTAL 24 Ags 2026' -- label kolom
+    perbandingan, gantiin label statis template asli yang sering telat
+    (lihat find_previous_raw())."""
+    m = _RAW_NAME_RE.match(prev_path.name)
+    ts = m.group(1)
+    y, mo, d = int(ts[:4]), int(ts[4:6]), int(ts[6:8])
+    return f"TOTAL {d} {_MONTH_ABBR_ID[mo]} {y}"
+
+
+def add_previous_total(df: pd.DataFrame, id_cols: list[str], prev_df: pd.DataFrame, label: str) -> pd.DataFrame:
+    """Sisipkan kolom TOTAL hari sebelumnya tepat SETELAH kolom TOTAL yang ada
+    (posisi sama seperti template asli: TOTAL | TOTAL <tgl lalu> | ACTUAL
+    ORDER | %) -- gabung by id_cols (Wilayah[,Depo]), bukan by posisi baris,
+    supaya tetap benar walau urutan berubah."""
+    merged = df.merge(prev_df[id_cols + ["TOTAL"]].rename(columns={"TOTAL": label}), on=id_cols, how="left")
+    cols = list(merged.columns)
+    cols.remove(label)
+    insert_at = cols.index("TOTAL") + 1
+    cols = cols[:insert_at] + [label] + cols[insert_at:]
+    return merged[cols]

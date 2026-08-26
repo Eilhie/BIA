@@ -69,6 +69,12 @@ def format_update_label(source_name: str) -> str:
     return f"UPDATE {d} {_MONTH_ID[mo]} {y} {hh:02d}:{mm:02d}"
 
 
+def _is_prev_total_col(col: str) -> bool:
+    """'TOTAL 24 Ags 2026' (label dinamis dari previous_total_label()) -- beda
+    dari kolom 'TOTAL' biasa, jadi dicek via prefix bukan exact match."""
+    return col.startswith("TOTAL ") and col != "TOTAL"
+
+
 def _col_fill(col: str) -> str:
     if col in ("NORM", "STOK", "DOI"):
         return C_DATA
@@ -76,7 +82,7 @@ def _col_fill(col: str) -> str:
         return C_BRAND_1
     if col in BRAND_GROUP_2:
         return C_BRAND_2
-    if col == "TOTAL":
+    if col == "TOTAL" or _is_prev_total_col(col):
         return C_TOTAL
     if col in ("ACTUAL ORDER", "%"):
         return C_DARK
@@ -128,9 +134,14 @@ def _header_groups(value_cols: list) -> list[tuple[str, list, str]]:
     order_cols = [c for c in bp.BRAND_COLUMNS if c in value_cols] + (["TOTAL"] if "TOTAL" in value_cols else [])
     if order_cols:
         groups.append(("PROPOSED ORDER", order_cols, C_BRAND_1))
-    for c in ("ACTUAL ORDER", "%"):
-        if c in value_cols:
-            groups.append((c, [c], C_DARK))
+    handled = set(data_cols) | set(order_cols)
+    # Kolom lain (ACTUAL ORDER, %, dan TOTAL <tanggal lalu> yang labelnya
+    # dinamis dari previous_total_label()) -- masing-masing grup sendiri
+    # (span 2 baris, tanpa sub-header), warna diambil dari _col_fill() supaya
+    # otomatis benar apa pun nama kolomnya.
+    for c in value_cols:
+        if c not in handled:
+            groups.append((c, [c], _col_fill(c)))
     return groups
 
 
