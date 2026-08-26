@@ -30,4 +30,4 @@ pages:
   "pages/10_Atur_Gabungan_HOREKA.py": 5  # status/isi grup gabungan HOREKA (dari file Excel terpisah)
   "pages/11_EAO_Sync.py": 5           # monitoring server EAO + sync manual
   "pages/12_Cukai_Kompetitor.py": 5   # estimasi volume kompetitor dari data cukai
-  "pages/13_BPR.py": 5                 # rekap NORM/STOK/DOI/Order harian per Depo & Wilayah
+  "pages/13_BPR.py": 4                 # rekap NORM/STOK/DOI/Order harian per Depo & Wilayah

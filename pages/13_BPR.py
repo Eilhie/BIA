@@ -38,7 +38,7 @@ def get_rekap() -> tuple[pd.DataFrame, pd.DataFrame, str] | None:
     return depo, wilayah, path.name
 
 
-auth.require_level(5, page="BPR")
+auth.require_level(4, page="BPR")
 st.title("BPR")
 st.caption(
     f"Sumber: file harian terbaru di bawah `{bp.KIRIM_DIR}` (dipilih otomatis dari timestamp di nama "
