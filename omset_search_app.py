@@ -129,11 +129,34 @@ if "last_query" in st.session_state:
         meta_cols[3].metric("Kota", info["Kota"])
         st.caption(f"{info['Propinsi']} / {info['Kota']} / {info['Kecamatan']} / {info['Alamat']}")
 
-        col_excel, _spacer, col_copyprint = st.columns([1.2, 2.3, 1.5])
+        # PNG disiapkan lebih dulu (dipakai bareng oleh tombol Download Gambar
+        # DAN Copy/Print di bawah) -- di-cache per (site, grup, with_keg)
+        # supaya tidak generate ulang tiap rerun Streamlit. Dibungkus try/except
+        # supaya kalau matplotlib gagal dimuat (mis. diblokir Windows Smart App
+        # Control), cuma fitur gambar yang mati -- bukan seluruh halaman
+        # (pencarian & tabel tetap harus jalan).
+        png_bytes = None
+        try:
+            cache_key = (q_site, q_type, want_keg)
+            if st.session_state.get("png_cache_key") != cache_key:
+                with st.spinner("Menyiapkan gambar laporan..."):
+                    # precomputed=row_cells yang sudah dihitung di atas -- tidak query
+                    # ulang; bytes kembali langsung dari render (tanpa baca ulang file).
+                    _, generated_png = render_outlet_report(
+                        q_site, q_type, with_keg=want_keg,
+                        precomputed=(row_cells, info, cutoff),
+                    )
+                    st.session_state["png_bytes"] = generated_png
+                    st.session_state["png_cache_key"] = cache_key
+            png_bytes = st.session_state["png_bytes"]
+        except Exception as e:
+            png_error = e
+
+        col_excel, col_image, _spacer, col_copyprint = st.columns([1.2, 1.2, 1.1, 1.5])
 
         with col_excel:
             # Excel murni pakai openpyxl (bukan matplotlib) jadi tidak terpengaruh kalau
-            # matplotlib gagal dimuat -- taruh di luar try/except Copy/Print di bawah.
+            # matplotlib gagal dimuat -- terpisah dari png_bytes di atas.
             # Bytes di-cache per (site, grup, with_keg) -- st.download_button mengevaluasi
             # argumennya tiap rerun, tanpa cache workbook openpyxl dibangun ulang terus.
             # precomputed=row_cells yang sudah dihitung di atas -- tidak query ulang.
@@ -148,28 +171,21 @@ if "last_query" in st.session_state:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
 
-        with col_copyprint:
-            # PNG disiapkan otomatis di belakang layar (bukan lewat tombol terpisah) --
-            # cuma dipakai sebagai sumber untuk tombol Copy/Print, tidak ditampilkan besar
-            # di halaman supaya tidak redundan dengan tabel di bawah. Di-cache per
-            # (site, grup, with_keg) supaya tidak generate ulang tiap rerun Streamlit.
-            # Dibungkus try/except supaya kalau matplotlib gagal dimuat (mis. diblokir
-            # Windows Smart App Control), cuma Copy/Print yang mati -- bukan seluruh
-            # halaman (pencarian & tabel tetap harus jalan).
-            try:
-                cache_key = (q_site, q_type, want_keg)
-                if st.session_state.get("png_cache_key") != cache_key:
-                    with st.spinner("Menyiapkan laporan untuk copy/print..."):
-                        # precomputed=row_cells yang sudah dihitung di atas -- tidak query
-                        # ulang; bytes kembali langsung dari render (tanpa baca ulang file).
-                        _, png_bytes = render_outlet_report(
-                            q_site, q_type, with_keg=want_keg,
-                            precomputed=(row_cells, info, cutoff),
-                        )
-                        st.session_state["png_bytes"] = png_bytes
-                        st.session_state["png_cache_key"] = cache_key
+        with col_image:
+            if png_bytes is not None:
+                st.download_button(
+                    "Download Gambar",
+                    png_bytes,
+                    file_name=f"{info['Site']} {info['Outlet']}.png",
+                    mime="image/png",
+                )
 
-                b64 = base64.b64encode(st.session_state["png_bytes"]).decode()
+        with col_copyprint:
+            try:
+                if png_bytes is None:
+                    raise png_error
+
+                b64 = base64.b64encode(png_bytes).decode()
                 components.html(
                     f"""
                 <style>
