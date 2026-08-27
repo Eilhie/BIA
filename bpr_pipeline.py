@@ -23,59 +23,76 @@ tanggal 24 Aug 2026 (lihat test_bpr_pipeline.py) -- bukan tebakan:
 """
 
 import re
+import tempfile
 from pathlib import Path
 
 import pandas as pd
+import py7zr
 import xlrd
 
 RAW_SHEET = "BPR DETAIL"
 
-# File raw harian diarsip di sini, satu file per hari, nama-nya bawa timestamp
-# lengkap -- INI yang dipakai buat cari "yang terbaru", BUKAN file di root
-# "D:\Data BIA\2026\Daily Report\BPR_BIA-DAILY.xls" (kelihatan seperti master/
-# current copy, tapi terbukti nyata mtime-nya macet di 4 Mei 2026 sementara
-# arsip per-tanggal SELALU update -- jangan pernah baca dari root file itu).
+# Sumber ASLI: Google Drive (G:) -- terbukti nyata file .7z masuk otomatis
+# tiap ~07:00 pagi TERMASUK weekend (16 file sejak 19 Agustus, termasuk 22 &
+# 25 Agustus yang WEEKEND). Folder lokal D:\Data BIA\...\Kirim\ ternyata cuma
+# salinan yang diekstrak MANUAL oleh seseorang dari sini -- kadang skip
+# weekend, kadang telat -- jadi G: dipakai duluan, D: cuma fallback kalau G:
+# (Google Drive Desktop) sedang tidak ke-mount di komputer yang jalanin app.
+GDRIVE_BPR_DIR = Path(r"G:\My Drive\BPR BIA")
 DAILY_REPORT_DIR = Path(r"D:\Data BIA\2026\Daily Report")
 KIRIM_DIR = DAILY_REPORT_DIR / "Kirim"
+
+_ARCHIVE_NAME_RE = re.compile(r"^BPR_BIA-(\d{14})\.7z$")
 _RAW_NAME_RE = re.compile(r"^BPR_BIA-(\d{14})\.xls$")
+_TS_RE = re.compile(r"BPR_BIA-(\d{14})\.")
+
+
+def _scan(dir_path: Path, pattern: str, name_re: re.Pattern) -> list[tuple[str, Path]]:
+    if not dir_path.exists():
+        return []
+    out = []
+    for p in dir_path.rglob(pattern):
+        m = name_re.match(p.name)
+        if m:
+            out.append((m.group(1), p))
+    return out
 
 
 def find_latest_raw() -> Path | None:
-    """Scan semua BPR_BIA-<timestamp>.xls di bawah Kirim\\ (rglob, nested per
-    bulan/tanggal), pilih yang timestamp-nya (di NAMA FILE, format
-    YYYYMMDDHHMMSS, sortable langsung sebagai string) paling besar -- pola sama
-    seperti find_latest_toko_gabungan() di omset_seeker.py, nama file lebih
-    bisa dipercaya daripada mtime filesystem."""
-    if not KIRIM_DIR.exists():
-        return None
-    candidates = []
-    for p in KIRIM_DIR.rglob("BPR_BIA-*.xls"):
-        m = _RAW_NAME_RE.match(p.name)
-        if m:
-            candidates.append((m.group(1), p))
+    """Cari BPR_BIA-<timestamp> paling baru -- coba Google Drive (.7z) dulu,
+    baru fallback ke arsip lokal D:\\...\\Kirim\\ (.xls) kalau G: tidak
+    ke-mount. Timestamp di NAMA FILE (format YYYYMMDDHHMMSS, sortable
+    langsung sebagai string) yang dipakai buat bandingkan, bukan mtime --
+    pola sama seperti find_latest_toko_gabungan() di omset_seeker.py."""
+    candidates = _scan(GDRIVE_BPR_DIR, "BPR_BIA-*.7z", _ARCHIVE_NAME_RE)
+    if not candidates:
+        candidates = _scan(KIRIM_DIR, "BPR_BIA-*.xls", _RAW_NAME_RE)
     if not candidates:
         return None
     return max(candidates, key=lambda x: x[0])[1]
 
 
 def find_previous_raw(current: Path) -> Path | None:
-    """Cari raw file PALING BARU SEBELUM `current` -- dipakai buat kolom
-    perbandingan 'TOTAL <tanggal>' (hari kerja sebelumnya yang datanya ada,
-    otomatis lompat weekend/hari libur kalau memang tidak ada laporan).
+    """Cari raw PALING BARU SEBELUM `current` (sumber & format sama seperti
+    `current` -- .7z di Google Drive kalau current dari sana, .xls lokal
+    kalau fallback) -- dipakai buat kolom perbandingan 'TOTAL <tanggal>' (hari
+    kerja sebelumnya yang datanya ada, otomatis lompat weekend/hari libur
+    kalau memang tidak ada laporan hari itu).
 
     Template asli punya kolom sejenis ('TOTAL 15 MAY 2026' dst.) tapi lewat
     external link Excel yang di-relink manual -- terbukti nyata sering telat
-    beberapa hari (lihat memory/commit history). Ini baca raw file historis
-    LANGSUNG, jadi selalu akurat tanpa perlu relink apa pun."""
-    m_cur = _RAW_NAME_RE.match(current.name)
-    if m_cur is None or not KIRIM_DIR.exists():
+    beberapa hari. Ini baca raw file historis LANGSUNG, jadi selalu akurat
+    tanpa perlu relink apa pun."""
+    is_archive = current.suffix == ".7z"
+    name_re = _ARCHIVE_NAME_RE if is_archive else _RAW_NAME_RE
+    scan_dir = GDRIVE_BPR_DIR if is_archive else KIRIM_DIR
+    pattern = "BPR_BIA-*.7z" if is_archive else "BPR_BIA-*.xls"
+
+    m_cur = name_re.match(current.name)
+    if m_cur is None:
         return None
     cur_ts = m_cur.group(1)
-    candidates = []
-    for p in KIRIM_DIR.rglob("BPR_BIA-*.xls"):
-        m = _RAW_NAME_RE.match(p.name)
-        if m and m.group(1) < cur_ts:
-            candidates.append((m.group(1), p))
+    candidates = [(ts, p) for ts, p in _scan(scan_dir, pattern, name_re) if ts < cur_ts]
     if not candidates:
         return None
     return max(candidates, key=lambda x: x[0])[1]
@@ -130,7 +147,7 @@ REGION_MAP = {
 }
 
 
-def load_raw(path) -> pd.DataFrame:
+def _read_raw_xls(path: Path) -> pd.DataFrame:
     """Baca sheet 'BPR DETAIL' dari file raw BPR_BIA-<timestamp>.xls lewat
     xlrd langsung (BUKAN pandas.read_excel(engine='xlrd') -- pandas
     mensyaratkan xlrd>=2.0.1 walau file .xls lama tetap terbaca sempurna
@@ -145,6 +162,24 @@ def load_raw(path) -> pd.DataFrame:
     records = [ws.row_values(r) for r in range(2, ws.nrows)]
     df = pd.DataFrame(records, columns=col_names)
     return df[df["SKU_ID"] != ""]
+
+
+def load_raw(path) -> pd.DataFrame:
+    """Dispatcher: kalau `path` arsip .7z (dari Google Drive), ekstrak dulu ke
+    folder temp lalu baca -- tiap arsip cuma isi SATU file .xls (dicek
+    langsung), jadi aman diasumsikan begitu. File .xls biasa (arsip lokal
+    D:\\...\\Kirim\\) dibaca langsung."""
+    path = Path(path)
+    if path.suffix != ".7z":
+        return _read_raw_xls(path)
+
+    with py7zr.SevenZipFile(path, mode="r") as z:
+        xls_name = next((n for n in z.getnames() if n.lower().endswith(".xls")), None)
+        if xls_name is None:
+            raise ValueError(f"Tidak ada file .xls di dalam arsip {path.name}")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            z.extract(path=tmp_dir, targets=[xls_name])
+            return _read_raw_xls(Path(tmp_dir) / xls_name)
 
 
 def _safe_div(a, b):
@@ -221,10 +256,10 @@ _MONTH_ABBR_ID = ["", "Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "S
 
 
 def previous_total_label(prev_path: Path) -> str:
-    """'BPR_BIA-20260824070100.xls' -> 'TOTAL 24 Ags 2026' -- label kolom
-    perbandingan, gantiin label statis template asli yang sering telat
-    (lihat find_previous_raw())."""
-    m = _RAW_NAME_RE.match(prev_path.name)
+    """'BPR_BIA-20260824070100.7z' (atau '.xls') -> 'TOTAL 24 Ags 2026' --
+    label kolom perbandingan, gantiin label statis template asli yang sering
+    telat (lihat find_previous_raw())."""
+    m = _TS_RE.search(prev_path.name)
     ts = m.group(1)
     y, mo, d = int(ts[:4]), int(ts[4:6]), int(ts[6:8])
     return f"TOTAL {d} {_MONTH_ABBR_ID[mo]} {y}"

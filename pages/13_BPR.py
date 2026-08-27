@@ -3,10 +3,14 @@ BPR (Buku Proposed Requirement / rekap harian NORM-STOK-DOI-Order)
 Replika Python dari "BPR BIA DAILY TEMPLATE.xlsx" (sheet Rekap Per DEPO +
 Rekap Per WILAYAH) -- selama ini dihitung manual lewat SUMIFS/AVERAGEIFS +
 external link Excel yang harus di-relink manual tiap pagi (kalau lupa,
-angkanya diam-diam basi). Halaman ini baca raw file harian LANGSUNG
-(D:\Data BIA\2026\Daily Report\Kirim\...\BPR_BIA-<timestamp>.xls, dipilih
-otomatis yang paling baru) dan hitung ulang dari nol tiap dibuka -- tidak
-pernah kena masalah lupa relink.
+angkanya diam-diam basi). Halaman ini baca raw file harian LANGSUNG dari
+Google Drive (G:\My Drive\BPR BIA\BPR_BIA-<timestamp>.7z, sumber ASLI --
+masuk otomatis tiap ~07:00 termasuk weekend, dipilih otomatis yang paling
+baru), fallback ke arsip lokal D:\Data BIA\...\Kirim\ (.xls) kalau G: tidak
+ke-mount. Folder lokal ternyata cuma salinan yang diekstrak MANUAL oleh
+seseorang dari Google Drive -- kadang skip weekend/telat, jadi bukan
+sumber utama lagi. Dihitung ulang dari nol tiap dibuka -- tidak pernah kena
+masalah lupa relink.
 
 Tampilan + warna kolom (DATA kuning, PROPOSED ORDER hijau/oranye, TOTAL
 merah, ACTUAL ORDER/% gelap) meniru PERSIS template Excel asli -- lihat
@@ -56,28 +60,29 @@ def get_rekap() -> tuple[pd.DataFrame, pd.DataFrame, str] | None:
 auth.require_level(4, page="BPR")
 st.title("BPR")
 st.caption(
-    f"Sumber: file harian terbaru di bawah `{bp.KIRIM_DIR}` (dipilih otomatis dari timestamp di nama "
-    "file) -- dihitung ulang langsung dari raw, tidak pernah kena masalah lupa relink external link "
-    "seperti file kerja Excel-nya. Murni baca & tampilkan."
+    f"Sumber: Google Drive `{bp.GDRIVE_BPR_DIR}` (fallback ke arsip lokal `{bp.KIRIM_DIR}` kalau G: "
+    "tidak ke-mount) -- dihitung ulang langsung dari raw, tidak pernah kena masalah lupa relink "
+    "external link seperti file kerja Excel-nya. Murni baca & tampilkan."
 )
 
 with st.spinner("Membaca & menghitung dari raw terbaru..."):
     result = get_rekap()
 
 if result is None:
-    st.error(f"Tidak ada file `BPR_BIA-<timestamp>.xls` ditemukan di bawah `{bp.KIRIM_DIR}`.")
+    st.error(f"Tidak ada file `BPR_BIA-<timestamp>` ditemukan di `{bp.GDRIVE_BPR_DIR}` maupun `{bp.KIRIM_DIR}`.")
     st.stop()
 
 depo_df, wilayah_df, source_name = result
 update_label = rb.format_update_label(source_name)
 st.caption(f"File yang dibaca: `{source_name}` -- {update_label}")
 
+source_stem = source_name.rsplit(".", 1)[0]
 col_xlsx, col_pdf = st.columns(2)
 with col_xlsx:
     st.download_button(
         "Download Excel",
         data=rb.build_excel_bytes(depo_df, wilayah_df, update_label),
-        file_name=f"BPR BIA - {source_name.replace('.xls', '')}.xlsx",
+        file_name=f"BPR BIA - {source_stem}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 with col_pdf:
@@ -85,7 +90,7 @@ with col_pdf:
         st.download_button(
             "Download PDF",
             data=rb.build_pdf_bytes(depo_df, wilayah_df, update_label),
-            file_name=f"BPR BIA - {source_name.replace('.xls', '')}.pdf",
+            file_name=f"BPR BIA - {source_stem}.pdf",
             mime="application/pdf",
         )
     else:

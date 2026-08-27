@@ -52,7 +52,7 @@ BRAND_GROUP_2 = bp.BRAND_COLUMNS[7:]
 
 FONT_NAME = "Calibri, sans-serif"
 
-_RAW_TS_RE = re.compile(r"BPR_BIA-(\d{14})\.xls")
+_RAW_TS_RE = re.compile(r"BPR_BIA-(\d{14})\.")
 _MONTH_ID = ["", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
              "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
 
