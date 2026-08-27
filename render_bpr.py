@@ -305,8 +305,12 @@ def _build_table_figure(df: pd.DataFrame, title: str, update_label: str) -> "Fig
     n_rows = len(df) + 2  # +2 header baris (grup + sub)
     n_cols = len(cols)
 
-    fig_w = sum(3.0 if c in id_cols else 1.15 for c in cols)
-    fig_h = 0.28 * n_rows + 1.2
+    # Skala 1,5x dari versi sebelumnya (font 5,5-6pt kebaca kekecilan pas
+    # PDF-nya dibuka/dicetak -- lebar kolom & tinggi baris dinaikkan proporsi
+    # SAMA supaya tidak ada teks yang jadi kepotong/tumpang tindih baru,
+    # cuma "zoom" seragam).
+    fig_w = sum(4.5 if c in id_cols else 1.7 for c in cols)
+    fig_h = 0.42 * n_rows + 1.6
     fig = Figure(figsize=(fig_w, fig_h), dpi=150)
     FigureCanvasAgg(fig)
     ax = fig.add_axes([0.01, 0.01, 0.98, 0.88])
@@ -314,13 +318,13 @@ def _build_table_figure(df: pd.DataFrame, title: str, update_label: str) -> "Fig
     ax.set_ylim(0, n_rows)
     ax.invert_yaxis()
     ax.axis("off")
-    fig.text(0.01, 0.985, "BPR BIA", fontsize=16, fontweight="bold")
-    fig.text(0.01, 0.955, update_label, fontsize=10, fontweight="bold")
-    fig.text(0.01, 0.93, title, fontsize=7, color="#666")
+    fig.text(0.01, 0.985, "BPR BIA", fontsize=24, fontweight="bold")
+    fig.text(0.01, 0.955, update_label, fontsize=15, fontweight="bold")
+    fig.text(0.01, 0.935, title, fontsize=10.5, color="#666")
 
     col_x = [0.0]
     for c in cols:
-        col_x.append(col_x[-1] + (3.0 if c in id_cols else 1.15))
+        col_x.append(col_x[-1] + (4.5 if c in id_cols else 1.7))
 
     rects, colors = [], []
     # baris 0: grup header, baris 1: sub header (id_cols & tall groups span kedua baris)
@@ -355,7 +359,7 @@ def _build_table_figure(df: pd.DataFrame, title: str, update_label: str) -> "Fig
     ci = 0
     for c in id_cols:
         ax.text((col_x[ci] + col_x[ci + 1]) / 2, 1, c.upper(), ha="center", va="center",
-                 fontsize=6, fontweight="bold")
+                 fontsize=9, fontweight="bold")
         ci += 1
     for label, gcols, color in groups:
         is_tall = len(gcols) == 1 and gcols[0] == label
@@ -363,12 +367,12 @@ def _build_table_figure(df: pd.DataFrame, title: str, update_label: str) -> "Fig
         fg = "white" if label in ("ACTUAL ORDER", "%") else "black"
         y = 1 if is_tall else 0.5
         ax.text((col_x[ci] + col_x[ci + span]) / 2, y, label, ha="center", va="center",
-                 fontsize=6, fontweight="bold", color=fg)
+                 fontsize=9, fontweight="bold", color=fg)
         if not is_tall:
             for k, c in enumerate(gcols):
                 fg2 = "white" if c in ("ACTUAL ORDER", "%") else "black"
                 ax.text((col_x[ci + k] + col_x[ci + k + 1]) / 2, 1.5, c, ha="center", va="center",
-                         fontsize=5, fontweight="bold", color=fg2)
+                         fontsize=7.5, fontweight="bold", color=fg2)
         ci += span
 
     for ri, (_, row) in enumerate(df.iterrows(), start=2):
@@ -381,7 +385,7 @@ def _build_table_figure(df: pd.DataFrame, title: str, update_label: str) -> "Fig
                 text = _fmt_cell(c, row[c])
                 align = "right"
                 x = col_x[c_i + 1] - 0.05
-            ax.text(x, ri + 0.5, text, ha=align, va="center", fontsize=5.5, fontweight="bold")
+            ax.text(x, ri + 0.5, text, ha=align, va="center", fontsize=8, fontweight="bold")
 
     return fig
 
