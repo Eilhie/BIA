@@ -12,6 +12,12 @@ seseorang dari Google Drive -- kadang skip weekend/telat, jadi bukan
 sumber utama lagi. Dihitung ulang dari nol tiap dibuka -- tidak pernah kena
 masalah lupa relink.
 
+Setiap file yang diambil dari Google Drive juga otomatis DISALIN BALIK
+(diekstrak) ke folder kerja lokal Kirim\<bulan>\<tanggal>\ (lihat
+bp.backup_to_local()) -- folder kerja harian yang biasa dipakai tetap
+ke-isi otomatis, mengisi celah weekend/hari yang sebelumnya suka
+terlewat kalau ekstraknya manual.
+
 Tampilan + warna kolom (DATA kuning, PROPOSED ORDER hijau/oranye, TOTAL
 merah, ACTUAL ORDER/% gelap) meniru PERSIS template Excel asli -- lihat
 render_bpr.py. Export Excel & PDF juga sama persis warnanya.
@@ -37,13 +43,17 @@ import render_bpr as rb
 
 
 @st.cache_data(show_spinner=False, ttl="10m")
-def get_rekap() -> tuple[pd.DataFrame, pd.DataFrame, str] | None:
+def get_rekap() -> tuple[pd.DataFrame, pd.DataFrame, str, list[str]] | None:
     path = bp.find_latest_raw()
     if path is None:
         return None
     raw = bp.load_raw(path)
     depo = bp.compute_rekap_depo(raw)
     wilayah = bp.compute_rekap_wilayah(raw, depo)
+
+    backed_up = []
+    if (result := bp.backup_to_local(path)) is not None and result[1]:
+        backed_up.append(result[0].name)
 
     prev_path = bp.find_previous_raw(path)
     if prev_path is not None:
@@ -54,7 +64,10 @@ def get_rekap() -> tuple[pd.DataFrame, pd.DataFrame, str] | None:
         depo = bp.add_previous_total(depo, ["Wilayah", "Depo"], prev_depo, label)
         wilayah = bp.add_previous_total(wilayah, ["Wilayah"], prev_wilayah, label)
 
-    return depo, wilayah, path.name
+        if (result := bp.backup_to_local(prev_path)) is not None and result[1]:
+            backed_up.append(result[0].name)
+
+    return depo, wilayah, path.name, backed_up
 
 
 auth.require_level(4, page="BPR")
@@ -72,9 +85,11 @@ if result is None:
     st.error(f"Tidak ada file `BPR_BIA-<timestamp>` ditemukan di `{bp.GDRIVE_BPR_DIR}` maupun `{bp.KIRIM_DIR}`.")
     st.stop()
 
-depo_df, wilayah_df, source_name = result
+depo_df, wilayah_df, source_name, backed_up = result
 update_label = rb.format_update_label(source_name)
 st.caption(f"File yang dibaca: `{source_name}` -- {update_label}")
+if backed_up:
+    st.caption(f"Disalin ke folder kerja lokal (`{bp.KIRIM_DIR}`): {', '.join(backed_up)}.")
 
 source_stem = source_name.rsplit(".", 1)[0]
 col_xlsx, col_pdf = st.columns(2)

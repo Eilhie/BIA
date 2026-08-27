@@ -22,8 +22,10 @@ tanggal 24 Aug 2026 (lihat test_bpr_pipeline.py) -- bukan tebakan:
     TOTAL malah tidak punya DOI sama sekali (kosong di template asli).
 """
 
+import os
 import re
 import tempfile
+import uuid
 from pathlib import Path
 
 import pandas as pd
@@ -96,6 +98,64 @@ def find_previous_raw(current: Path) -> Path | None:
     if not candidates:
         return None
     return max(candidates, key=lambda x: x[0])[1]
+
+
+_MONTH_ABBR_EN = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _local_folder_for(year: int, month: int, day: int) -> Path:
+    """Folder kerja lokal buat tanggal ini, ikut pola yang SUDAH dipakai
+    sendiri di Kirim\\ (mis. 'Aug - 08\\27 Aug', hari TANPA nol di depan) --
+    bukan bikin konvensi baru, biar file yang di-backup nyambung natural ke
+    folder yang biasa dibuka manual, bukan folder asing yang beda gaya."""
+    month_folder = f"{_MONTH_ABBR_EN[month]} - {month:02d}"
+    day_folder = f"{day} {_MONTH_ABBR_EN[month]}"
+    return KIRIM_DIR / month_folder / day_folder
+
+
+def backup_to_local(path: Path) -> tuple[Path, bool] | None:
+    """Kalau `path` diambil dari Google Drive (.7z), ekstrak & simpan salinan
+    .xls-nya ke folder kerja lokal Kirim\\<bulan>\\<tanggal>\\ -- supaya
+    folder kerja harian yang biasa dipakai tetap otomatis ke-isi, tidak lagi
+    bergantung ekstrak manual (yang terbukti suka skip weekend/telat).
+
+    Return (path_lokal, True) kalau baru ditulis, (path_lokal, False) kalau
+    sudah ada sebelumnya (tidak ditimpa), None kalau bukan .7z (sudah file
+    lokal, tidak perlu backup ke diri sendiri) atau gagal.
+
+    Best-effort -- kalau gagal (mis. tidak ada izin tulis, path aneh),
+    return None diam-diam, TIDAK boleh bikin halaman utama gagal cuma gara-
+    gara backup-nya gagal (backup itu bonus, bukan jalur kritis)."""
+    if path.suffix != ".7z":
+        return None
+    m = _TS_RE.search(path.name)
+    if m is None:
+        return None
+    ts = m.group(1)
+    y, mo, d = int(ts[:4]), int(ts[4:6]), int(ts[6:8])
+    target_dir = _local_folder_for(y, mo, d)
+    target_path = target_dir / f"BPR_BIA-{ts}.xls"
+    if target_path.exists():
+        return target_path, False
+
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        with py7zr.SevenZipFile(path, mode="r") as z:
+            xls_name = next((n for n in z.getnames() if n.lower().endswith(".xls")), None)
+            if xls_name is None:
+                return None
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                z.extract(path=tmp_dir, targets=[xls_name])
+                data = (Path(tmp_dir) / xls_name).read_bytes()
+        tmp_write = target_dir / f".BPR_BIA-{ts}.{uuid.uuid4().hex}.tmp"
+        try:
+            tmp_write.write_bytes(data)
+            os.replace(tmp_write, target_path)
+        finally:
+            tmp_write.unlink(missing_ok=True)
+        return target_path, True
+    except OSError:
+        return None
 
 
 # Urutan & nama brand PERSIS header kolom H4:Q4 di "Rekap Per DEPO" template
