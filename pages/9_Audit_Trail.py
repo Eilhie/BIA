@@ -41,6 +41,45 @@ until = str(datetime.combine(date_to, dtime.max)) if date_to else ""
 
 st.divider()
 
+st.subheader("Ringkasan Aktivitas")
+st.caption(
+    "Page counter & ringkasan pencarian -- ikut filter user/tanggal di atas. Kosongkan filter "
+    "user untuk lihat ringkasan SEMUA orang sekaligus."
+)
+
+total_events = db.count_events(username=username_filter, since=since, until=until)
+search_count = db.count_events(username=username_filter, action="cari_outlet", since=since, until=until)
+view_count = db.count_events(username=username_filter, action="lihat_outlet", since=since, until=until)
+sm1, sm2, sm3 = st.columns(3)
+sm1.metric("Total aksi tercatat", total_events)
+sm2.metric("Total pencarian outlet", search_count)
+sm3.metric("Total outlet dilihat", view_count)
+
+col_pages, col_side = st.columns(2)
+with col_pages:
+    st.caption("**Halaman paling sering dibuka** (page counter)")
+    pages = db.summarize_pages(username=username_filter, since=since, until=until)
+    if pages:
+        st.bar_chart(pd.DataFrame(pages, columns=["Halaman", "Jumlah"]).set_index("Halaman"))
+    else:
+        st.caption("Belum ada data.")
+
+with col_side:
+    if username_filter:
+        st.caption(f"**Rincian jenis aksi -- {username_filter}**")
+        actions = db.summarize_by_action(username=username_filter, since=since, until=until)
+        cols = ["Aksi", "Jumlah"]
+    else:
+        st.caption("**User paling aktif**")
+        actions = db.summarize_users(since=since, until=until)
+        cols = ["User", "Jumlah Aksi"]
+    if actions:
+        st.bar_chart(pd.DataFrame(actions, columns=cols).set_index(cols[0]))
+    else:
+        st.caption("Belum ada data.")
+
+st.divider()
+
 if username_filter:
     u_info = next((u for u in users if u["username"] == username_filter), None)
     recent_login = db.query_logs(username=username_filter, action="login", limit=1)

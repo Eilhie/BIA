@@ -165,6 +165,78 @@ def get_distinct_actions() -> list:
         return [r[0] for r in cursor.fetchall()]
 
 
+def _filtered_count_query(select_expr: str, username: str, action: str, since: str, until: str) -> tuple[str, list]:
+    """Bangun 'SELECT {select_expr}, COUNT(*) FROM access_log WHERE ... GROUP BY
+    {select_expr}' dengan filter opsional -- dipakai bareng oleh summarize_*()
+    di bawah supaya logika filter (username/action/rentang tanggal) konsisten
+    satu tempat, sama seperti pola di query_logs()."""
+    query = f'SELECT {select_expr}, COUNT(*) c FROM access_log WHERE 1=1'
+    params: list = []
+    if username:
+        query += ' AND username = ?'
+        params.append(username)
+    if action:
+        query += ' AND action = ?'
+        params.append(action)
+    if since:
+        query += ' AND timestamp >= ?'
+        params.append(since)
+    if until:
+        query += ' AND timestamp <= ?'
+        params.append(until)
+    query += f' GROUP BY {select_expr} ORDER BY c DESC'
+    return query, params
+
+
+def summarize_by_action(username: str = "", since: str = "", until: str = "") -> list[tuple[str, int]]:
+    """[(jenis_aksi, jumlah)] -- 'page counter' per jenis aksi (buka_halaman,
+    cari_outlet, lihat_outlet, dsb), diurutkan paling sering duluan."""
+    query, params = _filtered_count_query("action", username, "", since, until)
+    with get_connection() as conn:
+        return conn.execute(query, params).fetchall()
+
+
+def summarize_pages(username: str = "", since: str = "", until: str = "") -> list[tuple[str, int]]:
+    """[(nama_halaman, jumlah)] -- berapa kali tiap halaman DIBUKA (action=
+    'buka_halaman', detail-nya nama halaman) -- ini yang dimaksud 'page
+    counter': siapa pun yang buka halaman apa, kehitung di sini."""
+    query, params = _filtered_count_query("detail", username, "buka_halaman", since, until)
+    with get_connection() as conn:
+        return conn.execute(query, params).fetchall()
+
+
+def summarize_users(action: str = "", since: str = "", until: str = "", limit: int = 20) -> list[tuple[str, int]]:
+    """[(username, jumlah_aksi)] -- siapa paling aktif (opsional dibatasi ke
+    satu jenis aksi, mis. 'cari_outlet' buat lihat siapa paling banyak
+    mencari)."""
+    query, params = _filtered_count_query("username", "", action, since, until)
+    query += ' LIMIT ?'
+    params.append(limit)
+    with get_connection() as conn:
+        return conn.execute(query, params).fetchall()
+
+
+def count_events(username: str = "", action: str = "", since: str = "", until: str = "") -> int:
+    """Total baris access_log yang cocok filter -- dipakai buat metric
+    ringkasan ('X aksi tercatat dalam rentang ini')."""
+    query = 'SELECT COUNT(*) FROM access_log WHERE 1=1'
+    params: list = []
+    if username:
+        query += ' AND username = ?'
+        params.append(username)
+    if action:
+        query += ' AND action = ?'
+        params.append(action)
+    if since:
+        query += ' AND timestamp >= ?'
+        params.append(since)
+    if until:
+        query += ' AND timestamp <= ?'
+        params.append(until)
+    with get_connection() as conn:
+        return conn.execute(query, params).fetchone()[0]
+
+
 def count_recent_failed_attempts(username: str, window_seconds: int = 300) -> int:
     """Hitung percobaan login GAGAL untuk satu username dalam window waktu
     terakhir (detik) -- dipakai auth.py untuk lockout sementara setelah
