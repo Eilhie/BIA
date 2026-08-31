@@ -298,19 +298,30 @@ def _hex_rgb(h: str):
     return tuple(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
 
 
-def _build_table_figure(df: pd.DataFrame, title: str, update_label: str) -> "Figure":
-    id_cols, value_cols = _cols(df)
+def _build_table_figure(
+    df: pd.DataFrame, title: str, update_label: str, value_cols: list[str] | None = None,
+) -> "Figure":
+    """`value_cols` opsional = subset kolom angka yang MAU ditampilkan (dipakai
+    buat pagination -- lihat build_pdf_bytes()); default None = semua kolom.
+    id_cols (Wilayah/Depo) SELALU ikut, di sini atau lewat pemanggil."""
+    id_cols, all_value_cols = _cols(df)
+    if value_cols is None:
+        value_cols = all_value_cols
     groups = _header_groups(value_cols)
     cols = id_cols + value_cols
     n_rows = len(df) + 2  # +2 header baris (grup + sub)
     n_cols = len(cols)
 
-    # Skala 1,5x dari versi sebelumnya (font 5,5-6pt kebaca kekecilan pas
-    # PDF-nya dibuka/dicetak -- lebar kolom & tinggi baris dinaikkan proporsi
-    # SAMA supaya tidak ada teks yang jadi kepotong/tumpang tindih baru,
-    # cuma "zoom" seragam).
-    fig_w = sum(4.5 if c in id_cols else 1.7 for c in cols)
-    fig_h = 0.42 * n_rows + 1.6
+    # Font & lebar kolom dinaikkan lagi (dari skala 1,5x sebelumnya) -- itu saja
+    # ternyata TIDAK CUKUP: masalah sebenarnya adalah halaman jadi SANGAT LEBAR
+    # kalau semua ~18 kolom dipaksa satu halaman, jadi PDF viewer otomatis
+    # "fit to width" dan MENGECILKAN semuanya lagi berapa pun besar font
+    # aslinya (font vector PDF ikut ke-scale turun bareng lebar halaman).
+    # Makanya sekarang tabel lebar dipecah PER HALAMAN (lihat build_pdf_bytes),
+    # bukan cuma naikkan angka fontsize -- itu baru benar-benar menaikkan
+    # ukuran tampilnya di viewer, bukan cuma di source.
+    fig_w = sum(4.8 if c in id_cols else 2.1 for c in cols)
+    fig_h = 0.5 * n_rows + 1.8
     fig = Figure(figsize=(fig_w, fig_h), dpi=150)
     FigureCanvasAgg(fig)
     ax = fig.add_axes([0.01, 0.01, 0.98, 0.88])
@@ -318,13 +329,13 @@ def _build_table_figure(df: pd.DataFrame, title: str, update_label: str) -> "Fig
     ax.set_ylim(0, n_rows)
     ax.invert_yaxis()
     ax.axis("off")
-    fig.text(0.01, 0.985, "BPR BIA", fontsize=24, fontweight="bold")
-    fig.text(0.01, 0.955, update_label, fontsize=15, fontweight="bold")
-    fig.text(0.01, 0.935, title, fontsize=10.5, color="#666")
+    fig.text(0.01, 0.985, "BPR BIA", fontsize=28, fontweight="bold")
+    fig.text(0.01, 0.955, update_label, fontsize=17, fontweight="bold")
+    fig.text(0.01, 0.933, title, fontsize=12, color="#666")
 
     col_x = [0.0]
     for c in cols:
-        col_x.append(col_x[-1] + (4.5 if c in id_cols else 1.7))
+        col_x.append(col_x[-1] + (4.8 if c in id_cols else 2.1))
 
     rects, colors = [], []
     # baris 0: grup header, baris 1: sub header (id_cols & tall groups span kedua baris)
@@ -359,7 +370,7 @@ def _build_table_figure(df: pd.DataFrame, title: str, update_label: str) -> "Fig
     ci = 0
     for c in id_cols:
         ax.text((col_x[ci] + col_x[ci + 1]) / 2, 1, c.upper(), ha="center", va="center",
-                 fontsize=9, fontweight="bold")
+                 fontsize=11, fontweight="bold")
         ci += 1
     for label, gcols, color in groups:
         is_tall = len(gcols) == 1 and gcols[0] == label
@@ -367,12 +378,12 @@ def _build_table_figure(df: pd.DataFrame, title: str, update_label: str) -> "Fig
         fg = "white" if label in ("ACTUAL ORDER", "%") else "black"
         y = 1 if is_tall else 0.5
         ax.text((col_x[ci] + col_x[ci + span]) / 2, y, label, ha="center", va="center",
-                 fontsize=9, fontweight="bold", color=fg)
+                 fontsize=11, fontweight="bold", color=fg)
         if not is_tall:
             for k, c in enumerate(gcols):
                 fg2 = "white" if c in ("ACTUAL ORDER", "%") else "black"
                 ax.text((col_x[ci + k] + col_x[ci + k + 1]) / 2, 1.5, c, ha="center", va="center",
-                         fontsize=7.5, fontweight="bold", color=fg2)
+                         fontsize=9.5, fontweight="bold", color=fg2)
         ci += span
 
     for ri, (_, row) in enumerate(df.iterrows(), start=2):
@@ -385,15 +396,30 @@ def _build_table_figure(df: pd.DataFrame, title: str, update_label: str) -> "Fig
                 text = _fmt_cell(c, row[c])
                 align = "right"
                 x = col_x[c_i + 1] - 0.05
-            ax.text(x, ri + 0.5, text, ha=align, va="center", fontsize=8, fontweight="bold")
+            ax.text(x, ri + 0.5, text, ha=align, va="center", fontsize=10.5, fontweight="bold")
 
     return fig
 
 
+# Maksimal kolom ANGKA (di luar id_cols, yang selalu ikut tiap halaman) per
+# halaman PDF -- ini yang benar-benar menyelesaikan keluhan "kekecilan": tabel
+# lebar dipecah jadi beberapa halaman yang masing-masing lebih SEMPIT, jadi
+# PDF viewer tidak perlu scale-down sebanyak itu buat "fit to width".
+_MAX_VALUE_COLS_PER_PAGE = 7
+
+
+def _paginate_columns(value_cols: list[str]) -> list[list[str]]:
+    if len(value_cols) <= _MAX_VALUE_COLS_PER_PAGE:
+        return [value_cols]
+    return [value_cols[i:i + _MAX_VALUE_COLS_PER_PAGE] for i in range(0, len(value_cols), _MAX_VALUE_COLS_PER_PAGE)]
+
+
 def build_pdf_bytes(depo_df: pd.DataFrame, wilayah_df: pd.DataFrame, update_label: str) -> bytes:
-    """PDF 2 halaman (Rekap Per Depo, Rekap Per Wilayah) -- render via matplotlib
-    (pola sama seperti render_outlet_image.py: Figure + PatchCollection, savefig
-    ke format 'pdf' alih-alih 'png')."""
+    """PDF beberapa halaman per tabel (Rekap Per Depo, Rekap Per Wilayah) --
+    render via matplotlib (pola sama seperti render_outlet_image.py: Figure +
+    PatchCollection, savefig ke format 'pdf' alih-alih 'png'). Tabel yang
+    kolom angkanya > _MAX_VALUE_COLS_PER_PAGE dipecah jadi beberapa halaman
+    (id_cols/Wilayah/Depo diulang di tiap halaman biar tetap ada konteks)."""
     if not MATPLOTLIB_AVAILABLE:
         raise RuntimeError(f"matplotlib tidak bisa dimuat: {_MATPLOTLIB_IMPORT_ERROR}")
 
@@ -402,6 +428,10 @@ def build_pdf_bytes(depo_df: pd.DataFrame, wilayah_df: pd.DataFrame, update_labe
     buf = io.BytesIO()
     with PdfPages(buf) as pdf:
         for df, title in [(depo_df, "Rekap Per Depo"), (wilayah_df, "Rekap Per Wilayah")]:
-            fig = _build_table_figure(df, title, update_label)
-            pdf.savefig(fig, bbox_inches="tight")
+            _, value_cols = _cols(df)
+            pages = _paginate_columns(value_cols)
+            for i, cols_chunk in enumerate(pages, start=1):
+                page_title = title if len(pages) == 1 else f"{title} ({i}/{len(pages)})"
+                fig = _build_table_figure(df, page_title, update_label, value_cols=cols_chunk)
+                pdf.savefig(fig, bbox_inches="tight")
     return buf.getvalue()
