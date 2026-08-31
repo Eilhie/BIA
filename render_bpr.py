@@ -298,50 +298,131 @@ def _hex_rgb(h: str):
     return tuple(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
 
 
-def _build_table_figure(
-    df: pd.DataFrame, title: str, update_label: str, value_cols: list[str] | None = None,
-) -> "Figure":
-    """`value_cols` opsional = subset kolom angka yang MAU ditampilkan (dipakai
-    buat pagination -- lihat build_pdf_bytes()); default None = semua kolom.
-    id_cols (Wilayah/Depo) SELALU ikut, di sini atau lewat pemanggil."""
-    id_cols, all_value_cols = _cols(df)
-    if value_cols is None:
-        value_cols = all_value_cols
+# Ukuran halaman PERSIS PDF resmi (BPR BIA <tgl> 2026.pdf, dicek langsung
+# lewat PyMuPDF: page.rect = 792x612pt = 11x8.5in -- Letter landscape) --
+# BUKAN halaman custom-lebar seperti percobaan sebelumnya. Ini kunci
+# sebenarnya kenapa versi resminya kebaca normal di PDF viewer manapun:
+# ukuran halamannya STANDAR, jadi viewer tidak perlu scale-down apa pun:
+# font 6,5pt di kertas 11x8,5in itu memang ukuran normal buat tabel padat,
+# bukan "kekecilan" -- masalah sebelumnya BUKAN font-nya, tapi halamannya
+# yang custom-lebar (sampai 36in) sehingga viewer WAJIB scale-down banyak.
+PAGE_W_IN, PAGE_H_IN = 11.0, 8.5
+MARGIN_IN = 0.35
+FONT_TITLE, FONT_SUBTITLE, FONT_SECTION = 16.5, 10.5, 9
+FONT_HEADER, FONT_CELL = 6.5, 6.5
+
+# Header multi-kata (mis. "PROST RAJAWALI LAGER") di PDF resmi DI-WRAP satu
+# kata per baris (dicek langsung lewat koordinat span PyMuPDF -- "PROST ",
+# "RAJAWALI ", "LAGER" masing-masing baris terpisah) -- itu yang bikin kolom
+# brand bisa tetap sempit tanpa kepotong. Kolom yang cuma butuh selebar KATA
+# TERPANJANG dalam label yang sudah di-wrap, bukan seluruh frasa.
+def _wrap(label: str) -> str:
+    return "\n".join(label.split(" "))
+
+
+_PAD_IN = 0.09
+
+if MATPLOTLIB_AVAILABLE:
+    from matplotlib.font_manager import FontProperties
+    from matplotlib.textpath import TextPath
+    _BOLD_FP = FontProperties(weight="bold")
+
+
+def _line_width_in(line: str, fontsize: float) -> float:
+    """Lebar GLYPH SEBENARNYA (bukan tebakan per-karakter) -- ukuran karakter
+    bold beda-beda lebarnya ("I" vs "W"), tebakan rata-rata sempat bikin
+    WILAYAH/DEPO panjang (mis. "39-JATIM SELATAN HOREKA") tumpah ke kolom
+    sebelah. TextPath render path glyph sesuai font/ukuran yang BENERAN
+    dipakai di ax.text(), jadi lebarnya presisi."""
+    if not line:
+        return 0.0
+    tp = TextPath((0, 0), line, size=fontsize, prop=_BOLD_FP)
+    return tp.get_extents().width / 72.0
+
+
+def _text_width_in(text: str, fontsize: float = FONT_CELL) -> float:
+    """Lebar (inci) baris TERPANJANG dalam `text` (boleh multi-baris kalau
+    sudah di-_wrap()) -- dasar utama lebar kolom dinamis di bawah."""
+    longest = max((_line_width_in(line, fontsize) for line in text.split("\n")), default=0.0)
+    return longest + _PAD_IN
+
+
+def _col_width_in(df: pd.DataFrame, col: str, header_text: str) -> float:
+    """Lebar kolom = selebar konten/header TERPANJANG yang benar-benar akan
+    dicetak (bukan bobot tebakan) -- dijamin tidak pernah kepotong/tabrakan
+    apa pun isi datanya (nama wilayah/depo beda-beda panjang antar baris)."""
+    header_w = _text_width_in(header_text)
+    if col in df.columns:
+        if pd.api.types.is_numeric_dtype(df[col]):
+            data_w = max((_text_width_in(_fmt_cell(col, v)) for v in df[col]), default=0)
+        else:
+            data_w = max((_text_width_in(str(v)) for v in df[col].dropna()), default=0)
+    else:
+        data_w = 0
+    return max(header_w, data_w)
+
+
+def _build_table_figure(df: pd.DataFrame, title: str, update_label: str) -> "Figure":
+    id_cols, value_cols = _cols(df)
     groups = _header_groups(value_cols)
     cols = id_cols + value_cols
-    n_rows = len(df) + 2  # +2 header baris (grup + sub)
-    n_cols = len(cols)
+    n_data_rows = len(df)
+    header_h = 2.6  # baris sub-header lebih tinggi dari baris data -- muat teks 3-baris ter-wrap
+    n_rows = n_data_rows + header_h
 
-    # Font & lebar kolom dinaikkan lagi (dari skala 1,5x sebelumnya) -- itu saja
-    # ternyata TIDAK CUKUP: masalah sebenarnya adalah halaman jadi SANGAT LEBAR
-    # kalau semua ~18 kolom dipaksa satu halaman, jadi PDF viewer otomatis
-    # "fit to width" dan MENGECILKAN semuanya lagi berapa pun besar font
-    # aslinya (font vector PDF ikut ke-scale turun bareng lebar halaman).
-    # Makanya sekarang tabel lebar dipecah PER HALAMAN (lihat build_pdf_bytes),
-    # bukan cuma naikkan angka fontsize -- itu baru benar-benar menaikkan
-    # ukuran tampilnya di viewer, bukan cuma di source.
-    fig_w = sum(4.8 if c in id_cols else 2.1 for c in cols)
-    fig_h = 0.5 * n_rows + 1.8
-    fig = Figure(figsize=(fig_w, fig_h), dpi=150)
+    fig = Figure(figsize=(PAGE_W_IN, PAGE_H_IN), dpi=150)
     FigureCanvasAgg(fig)
-    ax = fig.add_axes([0.01, 0.01, 0.98, 0.88])
-    ax.set_xlim(0, fig_w)
+    fig.text(0.02, 0.965, "BPR BIA", fontsize=FONT_TITLE, fontweight="bold")
+    fig.text(0.02, 0.925, update_label, fontsize=FONT_SUBTITLE, fontweight="bold")
+    fig.text(0.02, 0.895, title, fontsize=FONT_SECTION, color="#666")
+
+    # Area tabel: sisa halaman di bawah judul, dengan margin kiri/kanan/bawah kecil.
+    table_top = 0.87
+    ax = fig.add_axes([
+        MARGIN_IN / PAGE_W_IN, MARGIN_IN / PAGE_H_IN,
+        1 - 2 * MARGIN_IN / PAGE_W_IN, table_top - MARGIN_IN / PAGE_H_IN,
+    ])
+
+    header_label_of = {c: c.upper() for c in id_cols}
+    for label, gcols, _ in _header_groups(value_cols):
+        is_tall = len(gcols) == 1 and gcols[0] == label
+        if is_tall:
+            header_label_of[gcols[0]] = _wrap(label)
+        else:
+            for c in gcols:
+                header_label_of[c] = _wrap(c)
+
+    col_w_in = {c: _col_width_in(df, c, header_label_of[c]) for c in cols}
+    total_w_in = sum(col_w_in.values())
+    avail_w_in = PAGE_W_IN - 2 * MARGIN_IN
+    # Kalau total kebutuhan pas/lebih dari lebar halaman, skala turun seragam
+    # (jarang kejadian, tapi jangan biarkan kolom tumpah keluar halaman) --
+    # kalau lebih kecil dari lebar halaman, biarkan longgar apa adanya (tidak
+    # dipaksa nutupin sisa ruang, sama seperti tabel resminya yang tidak
+    # memenuhi 100% lebar kertas).
+    scale = min(1.0, avail_w_in / total_w_in) if total_w_in > 0 else 1.0
+    # Kolom di-skala turun via `scale`, tapi ax.text() fontsize itu ukuran FISIK
+    # tetap (pt), tidak ikut skala sumbu data -- kalau tidak font ikut dikecilkan
+    # proporsional juga, teks (diukur lebar TextPath di font penuh) akan tumpah
+    # keluar kolom yang sudah mengecil (lebih sempit dari lebar teks aslinya).
+    font_header = FONT_HEADER * scale
+    font_cell = FONT_CELL * scale
+
+    ax.set_xlim(0, total_w_in * scale)
     ax.set_ylim(0, n_rows)
     ax.invert_yaxis()
     ax.axis("off")
-    fig.text(0.01, 0.985, "BPR BIA", fontsize=28, fontweight="bold")
-    fig.text(0.01, 0.955, update_label, fontsize=17, fontweight="bold")
-    fig.text(0.01, 0.933, title, fontsize=12, color="#666")
 
     col_x = [0.0]
     for c in cols:
-        col_x.append(col_x[-1] + (4.8 if c in id_cols else 2.1))
+        col_x.append(col_x[-1] + col_w_in[c] * scale)
 
     rects, colors = [], []
-    # baris 0: grup header, baris 1: sub header (id_cols & tall groups span kedua baris)
+    # baris 0: grup header (tinggi 1), baris 1: sub header (tinggi header_h-1,
+    # muat teks ter-wrap) -- id_cols & tall groups span keduanya sekaligus.
     ci = 0
     for c in id_cols:
-        rects.append(Rectangle((col_x[ci], 0), col_x[ci + 1] - col_x[ci], 2))
+        rects.append(Rectangle((col_x[ci], 0), col_x[ci + 1] - col_x[ci], header_h))
         colors.append((1, 1, 1))
         ci += 1
     for label, gcols, color in groups:
@@ -349,44 +430,46 @@ def _build_table_figure(
         span = len(gcols)
         rgb = _hex_rgb(color)
         if is_tall:
-            rects.append(Rectangle((col_x[ci], 0), col_x[ci + span] - col_x[ci], 2))
+            rects.append(Rectangle((col_x[ci], 0), col_x[ci + span] - col_x[ci], header_h))
             colors.append(rgb)
         else:
             rects.append(Rectangle((col_x[ci], 0), col_x[ci + span] - col_x[ci], 1))
             colors.append(rgb)
             for k, c in enumerate(gcols):
-                rects.append(Rectangle((col_x[ci + k], 1), col_x[ci + k + 1] - col_x[ci + k], 1))
+                rects.append(Rectangle((col_x[ci + k], 1), col_x[ci + k + 1] - col_x[ci + k], header_h - 1))
                 colors.append(_hex_rgb(_col_fill(c)))
         ci += span
 
-    for ri, (_, row) in enumerate(df.iterrows(), start=2):
+    for i, (_, row) in enumerate(df.iterrows()):
+        ri = header_h + i
         bg = (0.93, 0.93, 0.93) if _is_total_row(row) else (1, 1, 1)
-        for c in range(n_cols):
+        for c in range(len(cols)):
             rects.append(Rectangle((col_x[c], ri), col_x[c + 1] - col_x[c], 1))
             colors.append(bg)
 
-    ax.add_collection(PatchCollection(rects, facecolor=colors, edgecolor="#999", linewidth=0.4))
+    ax.add_collection(PatchCollection(rects, facecolor=colors, edgecolor="#999", linewidth=0.3))
 
     ci = 0
     for c in id_cols:
-        ax.text((col_x[ci] + col_x[ci + 1]) / 2, 1, c.upper(), ha="center", va="center",
-                 fontsize=11, fontweight="bold")
+        ax.text((col_x[ci] + col_x[ci + 1]) / 2, header_h / 2, header_label_of[c], ha="center", va="center",
+                 fontsize=font_header, fontweight="bold")
         ci += 1
     for label, gcols, color in groups:
         is_tall = len(gcols) == 1 and gcols[0] == label
         span = len(gcols)
         fg = "white" if label in ("ACTUAL ORDER", "%") else "black"
-        y = 1 if is_tall else 0.5
-        ax.text((col_x[ci] + col_x[ci + span]) / 2, y, label, ha="center", va="center",
-                 fontsize=11, fontweight="bold", color=fg)
+        y = header_h / 2 if is_tall else 0.5
+        ax.text((col_x[ci] + col_x[ci + span]) / 2, y, header_label_of[gcols[0]] if is_tall else label,
+                 ha="center", va="center", fontsize=font_header, fontweight="bold", color=fg)
         if not is_tall:
             for k, c in enumerate(gcols):
                 fg2 = "white" if c in ("ACTUAL ORDER", "%") else "black"
-                ax.text((col_x[ci + k] + col_x[ci + k + 1]) / 2, 1.5, c, ha="center", va="center",
-                         fontsize=9.5, fontweight="bold", color=fg2)
+                ax.text((col_x[ci + k] + col_x[ci + k + 1]) / 2, 1 + (header_h - 1) / 2, header_label_of[c],
+                         ha="center", va="center", fontsize=font_header, fontweight="bold", color=fg2)
         ci += span
 
-    for ri, (_, row) in enumerate(df.iterrows(), start=2):
+    for i, (_, row) in enumerate(df.iterrows()):
+        ri = header_h + i
         for c_i, c in enumerate(cols):
             if c in id_cols:
                 text = "" if pd.isna(row[c]) else str(row[c])
@@ -396,30 +479,16 @@ def _build_table_figure(
                 text = _fmt_cell(c, row[c])
                 align = "right"
                 x = col_x[c_i + 1] - 0.05
-            ax.text(x, ri + 0.5, text, ha=align, va="center", fontsize=10.5, fontweight="bold")
+            ax.text(x, ri + 0.5, text, ha=align, va="center", fontsize=font_cell, fontweight="bold")
 
     return fig
 
 
-# Maksimal kolom ANGKA (di luar id_cols, yang selalu ikut tiap halaman) per
-# halaman PDF -- ini yang benar-benar menyelesaikan keluhan "kekecilan": tabel
-# lebar dipecah jadi beberapa halaman yang masing-masing lebih SEMPIT, jadi
-# PDF viewer tidak perlu scale-down sebanyak itu buat "fit to width".
-_MAX_VALUE_COLS_PER_PAGE = 7
-
-
-def _paginate_columns(value_cols: list[str]) -> list[list[str]]:
-    if len(value_cols) <= _MAX_VALUE_COLS_PER_PAGE:
-        return [value_cols]
-    return [value_cols[i:i + _MAX_VALUE_COLS_PER_PAGE] for i in range(0, len(value_cols), _MAX_VALUE_COLS_PER_PAGE)]
-
-
 def build_pdf_bytes(depo_df: pd.DataFrame, wilayah_df: pd.DataFrame, update_label: str) -> bytes:
-    """PDF beberapa halaman per tabel (Rekap Per Depo, Rekap Per Wilayah) --
-    render via matplotlib (pola sama seperti render_outlet_image.py: Figure +
-    PatchCollection, savefig ke format 'pdf' alih-alih 'png'). Tabel yang
-    kolom angkanya > _MAX_VALUE_COLS_PER_PAGE dipecah jadi beberapa halaman
-    (id_cols/Wilayah/Depo diulang di tiap halaman biar tetap ada konteks)."""
+    """PDF 2 halaman (Rekap Per Depo, Rekap Per Wilayah), ukuran & skala font
+    PERSIS PDF resmi (Letter landscape, lihat _build_table_figure()) -- render
+    via matplotlib (pola sama seperti render_outlet_image.py: Figure +
+    PatchCollection, savefig ke format 'pdf' alih-alih 'png')."""
     if not MATPLOTLIB_AVAILABLE:
         raise RuntimeError(f"matplotlib tidak bisa dimuat: {_MATPLOTLIB_IMPORT_ERROR}")
 
@@ -428,10 +497,6 @@ def build_pdf_bytes(depo_df: pd.DataFrame, wilayah_df: pd.DataFrame, update_labe
     buf = io.BytesIO()
     with PdfPages(buf) as pdf:
         for df, title in [(depo_df, "Rekap Per Depo"), (wilayah_df, "Rekap Per Wilayah")]:
-            _, value_cols = _cols(df)
-            pages = _paginate_columns(value_cols)
-            for i, cols_chunk in enumerate(pages, start=1):
-                page_title = title if len(pages) == 1 else f"{title} ({i}/{len(pages)})"
-                fig = _build_table_figure(df, page_title, update_label, value_cols=cols_chunk)
-                pdf.savefig(fig, bbox_inches="tight")
+            fig = _build_table_figure(df, title, update_label)
+            pdf.savefig(fig)
     return buf.getvalue()
