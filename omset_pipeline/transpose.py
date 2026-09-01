@@ -553,11 +553,17 @@ def _brand_worker(args):
         return _WORKER_FAILED
 
 
-def _run_pool(args, label, max_workers=12):
+def _run_pool(args, label, max_workers=20):
     # [OPT-1] Cap ke jumlah core CPU yang benar-benar ada -- oversubscribe
     # di atas core fisik untuk kerja CPU-bound (parsing xlrd) memperlambat,
-    # bukan mempercepat (context-switch overhead). max_workers=12 adalah
-    # target atas, bukan nilai yang dipaksakan.
+    # bukan mempercepat (context-switch overhead). max_workers=20 adalah
+    # target atas, bukan nilai yang dipaksakan -- dinaikkan dari 12 setelah
+    # diukur nyata: 4 proses paralel makan waktu SAMA PERSIS dengan 1 proses
+    # sendirian (~225s), jadi tidak ada tanda kontensi I/O/CPU sampai level
+    # itu. 20 (bukan 32, jumlah core fisik) sengaja disisakan ruang -- worker
+    # terbesar terukur ~756MB RSS (file DIV-AB1/BIR/SINGARAJA), dan proses
+    # Transpose ini jalan bareng Streamlit server yang sama, jadi jangan
+    # habiskan semua core/RAM cuma buat batch ini.
     n_workers = min(max_workers, os.cpu_count() or max_workers, len(args))
     print(f"  Paralel: {n_workers} proses untuk {len(args)} brand (output mungkin bercampur)\n")
     with Pool(processes=n_workers) as pool:
