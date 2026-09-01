@@ -54,6 +54,12 @@ def get_rekap() -> tuple[pd.DataFrame, pd.DataFrame, str, list[str]] | None:
     backed_up = []
     if (result := bp.backup_to_local(path)) is not None and result[1]:
         backed_up.append(result[0].name)
+    # Versi Excel-nya juga di-backup (bukan cuma raw) -- supaya file siap
+    # dipakai lanjut (life cycle harian, gantiin file kerja Excel manual)
+    # tanpa perlu klik Download tiap buka halaman ini.
+    cur_label = rb.format_update_label(path.name)
+    if (result := rb.backup_excel_to_local(path.name, depo, wilayah, cur_label)) is not None and result[1]:
+        backed_up.append(result[0].name)
 
     prev_path = bp.find_previous_raw(path)
     if prev_path is not None:
@@ -65,6 +71,12 @@ def get_rekap() -> tuple[pd.DataFrame, pd.DataFrame, str, list[str]] | None:
         wilayah = bp.add_previous_total(wilayah, ["Wilayah"], prev_wilayah, label)
 
         if (result := bp.backup_to_local(prev_path)) is not None and result[1]:
+            backed_up.append(result[0].name)
+        # Backup Excel hari SEBELUMNYA juga -- pakai depo/wilayah versi
+        # ASLI hari itu (prev_depo/prev_wilayah, sebelum di-merge dengan
+        # kolom perbandingan di atas), bukan versi gabungan punya `path`.
+        prev_label = rb.format_update_label(prev_path.name)
+        if (result := rb.backup_excel_to_local(prev_path.name, prev_depo, prev_wilayah, prev_label)) is not None and result[1]:
             backed_up.append(result[0].name)
 
     return depo, wilayah, path.name, backed_up

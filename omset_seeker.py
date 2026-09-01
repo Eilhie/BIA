@@ -36,13 +36,13 @@ MONTH_LABELS = [
     for m in ["JAN", "FEB", "MAR", "APR", "MEI", "JUN", "JUL", "AGS", "SEP", "OKT", "NOV", "DES"]
 ]
 
-# 20 brand SKU (sama dengan transpose.py)
+# 21 brand SKU (sama dengan transpose.py)
 BRAND_ORDER = [
     "ABIDIN", "AMERAJA", "APIDIN", "SOMAEK",
     "SIMER", "SIJO", "SIDU", "SIRAK",
     "SPA FILTERED", "SPA UNFILTERED", "SINGARAJA",
     "PROST PILSENER", "PROST LAGER", "PRL LAGER",
-    "PRL APPLE LIME", "PRL RASPBERRY",
+    "PRL APPLE LIME", "PRL RASPBERRY", "PROST RAJAWALI",
     "PROST ALSTER", "KALTENBERG", "KONIG WEISSBIER", "KONIG DUNKEL",
 ]
 

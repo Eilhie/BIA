@@ -21,7 +21,10 @@ lewat openpyxl cell.fill/font/number_format/merged_cells, bukan tebakan):
 """
 
 import io
+import os
 import re
+import uuid
+from pathlib import Path
 
 import openpyxl
 import pandas as pd
@@ -291,6 +294,53 @@ def build_excel_bytes(depo_df: pd.DataFrame, wilayah_df: pd.DataFrame, update_la
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def backup_excel_bytes_path(raw_name: str) -> Path | None:
+    """Path tujuan backup Excel di folder kerja lokal (sama seperti raw .xls --
+    lihat bpr_pipeline.backup_to_local()) untuk raw bernama `raw_name`, atau
+    None kalau nama file tidak punya timestamp BPR_BIA yang valid."""
+    m = bp._TS_RE.search(raw_name)
+    if m is None:
+        return None
+    ts = m.group(1)
+    y, mo, d = int(ts[:4]), int(ts[4:6]), int(ts[6:8])
+    return bp._local_folder_for(y, mo, d) / f"BPR BIA - BPR_BIA-{ts}.xlsx"
+
+
+def backup_excel_to_local(raw_name: str, depo_df: pd.DataFrame, wilayah_df: pd.DataFrame,
+                           update_label: str) -> tuple[Path, bool] | None:
+    """Simpan versi Excel (build_excel_bytes) ke folder kerja lokal yang sama dengan
+    raw .xls (lihat bpr_pipeline.backup_to_local()) -- supaya file Excel-nya SUDAH
+    ADA di sana begitu halaman dibuka (auto, tanpa perlu klik Download tiap kali),
+    dan otomatis jadi backup harian. Dipanggil untuk raw HARI INI maupun HARI
+    SEBELUMNYA (lihat pages/13_BPR.py) -- beda dari backup_to_local() (raw .xls)
+    yang cuma jalan kalau sumbernya .7z dari Google Drive, di sini SELALU jalan
+    (raw_name cukup nama file buat nentuin folder tujuan lewat timestamp, tidak
+    harus dari .7z) karena tujuannya bukan salin raw, tapi selalu punya hasil
+    Excel jadi di folder kerja.
+
+    Return (path_lokal, True) kalau baru ditulis, (path_lokal, False) kalau sudah
+    ada sebelumnya (tidak ditimpa), None kalau nama file tidak valid atau gagal
+    tulis. Best-effort -- gagal di sini TIDAK boleh gagalkan halaman utama."""
+    target_path = backup_excel_bytes_path(raw_name)
+    if target_path is None:
+        return None
+    if target_path.exists():
+        return target_path, False
+
+    try:
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        data = build_excel_bytes(depo_df, wilayah_df, update_label)
+        tmp_write = target_path.with_name(f".{target_path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            tmp_write.write_bytes(data)
+            os.replace(tmp_write, target_path)
+        finally:
+            tmp_write.unlink(missing_ok=True)
+        return target_path, True
+    except OSError:
+        return None
 
 
 def _hex_rgb(h: str):
