@@ -84,7 +84,8 @@ BRAND_ORDER = [
     "SIMER", "SIJO", "SIDU", "SIRAK",
     "SPA FILTERED", "SPA UNFILTERED", "SINGARAJA",
     "PROST PILSENER", "PROST LAGER", "PRL LAGER",
-    "PRL APPLE LIME", "PRL RASPBERRY", "RAJAWALI FLAVOUR",
+    "PRL APPLE LIME", "PRL RASPBERRY",
+    "SINGARAJA BREMER HWG",
     "PROST ALSTER", "KALTENBERG", "KONIG WEISSBIER", "KONIG DUNKEL",
     "BIR", "DIV AB1",
 ]
@@ -112,7 +113,7 @@ UMUM_FILE = {
     "PRL LAGER": ["PRL"],
     "PRL APPLE LIME": ["RFALP330", "RFALC320"],
     "PRL RASPBERRY": ["RFRBP330", "RPAUC320"],
-    "RAJAWALI FLAVOUR": ["PROST RAJAWALI"],
+    "SINGARAJA BREMER HWG": ["SKB620PH"],
     "PROST ALSTER": ["PALS"],
     "KALTENBERG": ["KRL"],
     "KONIG WEISSBIER": ["WBR"],
@@ -145,7 +146,7 @@ HOREKA_FILE = {
     "PRL LAGER": ["PRL"],
     "PRL APPLE LIME": ["RFALP330", "RFALC330"],
     "PRL RASPBERRY": ["RFRBP320", "RPAUC320"],
-    "RAJAWALI FLAVOUR": ["PROST RAJAWALI"],
+    "SINGARAJA BREMER HWG": ["SKB620PH"],
     "PROST ALSTER": ["PALS"],
     "KALTENBERG": ["KRL"],
     "KONIG WEISSBIER": ["WBR"],
@@ -160,21 +161,35 @@ HOREKA_FILE = {
 # tiap baris KEG -- itu bug copy-paste (drag-down dari baris KONIG DUNKEL),
 # dikonfirmasi user untuk TIDAK direplikasi. Tiap brand KEG di bawah cuma
 # dari file sumbernya sendiri.
+# KEG 10 & PET 20L -- SKU baru (belum ada di server saat ditambahkan, per cek
+# langsung ke DEST_DB + SKU_LIST), ditambahkan sebagai fallback siap pakai:
+# process_brand() sudah otomatis skip (bukan gagal) kalau file sumbernya
+# belum ada, jadi aman ditambahkan sekarang -- begitu SKU-nya benar-benar
+# disync, langsung ikut ditranspose tanpa perlu ubah kode lagi.
 HOREKA_KEG_BRAND_ORDER = [
-    "SINGARAJA KEG 20", "SINGARAJA KEG 30",
-    "PROST PILSENER KEG 20", "PROST PILSENER KEG 30",
-    "PROST LAGER KEG 20", "PROST LAGER KEG 30",
-    "PROST RAJAWALI KEG",
+    "SINGARAJA KEG 10", "SINGARAJA KEG 20", "SINGARAJA KEG 30",
+    "PROST PILSENER KEG 10", "PROST PILSENER KEG 20", "PROST PILSENER KEG 30",
+    "PROST LAGER KEG 10", "PROST LAGER KEG 20", "PROST LAGER KEG 30",
+    "PROST RAJAWALI KEG 10", "PROST RAJAWALI KEG 30",
+    "SINGARAJA PET 20L", "PROST PILSENER PET 20L", "PROST LAGER PET 20L", "PROST RAJAWALI PET 20L",
 ]
 
 HOREKA_KEG_FILE = {
+    "SINGARAJA KEG 10": ["SKEG10P"],
     "SINGARAJA KEG 20": ["SKEG20P"],
     "SINGARAJA KEG 30": ["SKEG30P"],
+    "PROST PILSENER KEG 10": ["PKEG10P"],
     "PROST PILSENER KEG 20": ["PKEG20P"],
     "PROST PILSENER KEG 30": ["PKEG30P"],
+    "PROST LAGER KEG 10": ["PKEG10L"],
     "PROST LAGER KEG 20": ["PKEG20L"],
     "PROST LAGER KEG 30": ["PKEG30L"],
-    "PROST RAJAWALI KEG": ["RPKEG30L"],
+    "PROST RAJAWALI KEG 10": ["RPKEG10L"],
+    "PROST RAJAWALI KEG 30": ["RPKEG30L"],
+    "SINGARAJA PET 20L": ["SPET20P"],
+    "PROST PILSENER PET 20L": ["PPET20P"],
+    "PROST LAGER PET 20L": ["PPET20L"],
+    "PROST RAJAWALI PET 20L": ["RPPET20L"],
 }
 
 

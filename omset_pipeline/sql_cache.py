@@ -406,7 +406,6 @@ if __name__ == "__main__":
             "RPKC500L": ("PRL LAGER", 1),
             "RPKB620L": ("PRL LAGER", 1),
             "RPKB330L": ("PRL LAGER", 1),
-            "PROST RAJAWALI": ("RAJAWALI FLAVOUR", 1),  # file name unchanged, brand renamed -- see Blueprint
         }
         out_path = OUT_DIR / "UMUM_smoketest.db"
         t0 = time.time()

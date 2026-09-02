@@ -290,7 +290,11 @@ if "transpose_state" in st.session_state:
     _transpose_progress()
 else:
     mode = st.radio("Mode", ["UMUM", "HOREKA", "ALL"], horizontal=True)
-    st.caption("HOREKA otomatis mencakup 7 brand KEG tambahan. Mode ALL bisa makan waktu ~1.5-2 jam.")
+    st.caption(
+        f"HOREKA otomatis mencakup {len(_t.HOREKA_KEG_BRAND_ORDER)} brand KEG/PET tambahan "
+        f"(termasuk yang SKU-nya belum disync -- otomatis di-skip sampai ada). "
+        f"Mode ALL bisa makan waktu ~1.5-2 jam."
+    )
 
     if st.button("Mulai Transpose", type="primary"):
         _start_transpose(mode)
