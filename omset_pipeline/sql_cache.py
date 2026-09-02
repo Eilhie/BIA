@@ -157,8 +157,25 @@ def build_sku_plan(omshar_type: str, extra_groups: list[str]) -> dict:
         codes = [l.strip() for l in txt.read_text(encoding="utf-8-sig").splitlines() if l.strip()]
         for code in codes:
             if code not in plan and (DEST_DB / f"OMSHAR {omshar_type} {code}.xls").exists():
-                plan[code] = (group, 0)  # display-only grouping, see Blueprint §7
+                brand = _DISPLAY_OVERRIDE.get(code, group)
+                plan[code] = (brand, 0)  # display-only grouping, see Blueprint §7
     return plan
+
+
+# Display-grouping overrides for codes whose SKU_LIST folder name isn't the
+# right label to show them under (is_rollup stays 0 either way -- this only
+# changes which brand bucket Detail SKU Brand Besar shows the variant in,
+# never any total). Confirmed by user: any "PROST RAJAWALI" / "RAJAWALI
+# PROST *"-named code in the shared PROST RAJAWALI.txt folder is the base
+# Lager line, same family as the "PRL" rollup file -- not Apple Lime or
+# Raspberry, which already have their own explicitly-named codes.
+_DISPLAY_OVERRIDE = {
+    "PROST RAJAWALI": "PRL LAGER",
+    "RAJAWALI PROST BREMER": "PRL LAGER",
+    "RAJAWALI PROST CAN": "PRL LAGER",
+    "RAJAWALI PROS FLAVOUR CAN": "PRL LAGER",
+    "RAJAWALI PROST FLAVOUR PINT": "PRL LAGER",
+}
 
 
 def build_channel_db(omshar_type: str, sku_plan: dict, out_path: Path) -> dict:
