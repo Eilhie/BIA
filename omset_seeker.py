@@ -251,32 +251,50 @@ _INDO_MONTHS = {
 _TOKO_GABUNGAN_NAME_RE = re.compile(
     r"^Toko Gabungan Update (\d{1,2}) (\w+) (\d{4})\.xlsx$", re.IGNORECASE
 )
+# Format lebih baru yang dipakai analis mulai sekitar Agustus 2026 -- tidak
+# punya tanggal harian (cuma bulan), jadi dibandingkan pakai day=99 (lihat di
+# bawah) supaya menang atas file 'Update' bulan yang SAMA (diasumsikan lebih
+# baru/aktif dipakai -- namanya sendiri bilang 'Live'), tapi tetap kalah dari
+# file 'Update' bulan yang benar-benar lebih baru kalau analis kembali ke
+# konvensi lama di bulan berikutnya.
+_TOKO_GABUNGAN_LIVE_NAME_RE = re.compile(
+    r"^Toko Gabungan \(Formula Live\) - Data (\w+) (\d{4})\.xlsx$", re.IGNORECASE
+)
 
 
 def find_latest_toko_gabungan() -> Path | None:
-    """File 'Toko Gabungan Update {tgl} {bulan} {tahun}.xlsx' diupdate manual tiap bulan.
+    """File 'Toko Gabungan Update {tgl} {bulan} {tahun}.xlsx' diupdate manual tiap bulan,
+    ATAU 'Toko Gabungan (Formula Live) - Data {bulan} {tahun}.xlsx' (konvensi lebih baru,
+    tanpa tanggal harian -- lihat _TOKO_GABUNGAN_LIVE_NAME_RE).
 
     Tanggal diambil dari NAMA FILE (bukan LastWriteTime filesystem) -- LastWriteTime tidak
     bisa dipercaya karena berubah kalau ada file lain di folder itu yang dibuka/disimpan
     orang di Excel (pernah kejadian: file 'Update 1 April 2026' yang lagi dibuka orang
     kelihatan lebih baru dari 'Update 2 Juli 2026' yang isinya benar-benar lebih baru,
     padahal ukurannya 690MB dan bikin lama sekali/macet kalau ke-parse tanpa sengaja).
-    File yang namanya tidak persis cocok pola ini (varian '-val', '- Copy', 'REV', dst)
-    sengaja diabaikan -- hanya rilis bulanan asli yang dipakai."""
+    File yang namanya tidak persis cocok salah satu dari kedua pola ini (varian '-val',
+    '- Copy', 'REV', dst) sengaja diabaikan -- hanya rilis resmi yang dipakai."""
     if not TOKO_GABUNGAN_DIR.exists():
         return None
     dated = []
-    for p in TOKO_GABUNGAN_DIR.glob("Toko Gabungan Update*.xlsx"):
+    for p in TOKO_GABUNGAN_DIR.glob("Toko Gabungan*.xlsx"):
         if p.name.startswith("~$"):
             continue
         m = _TOKO_GABUNGAN_NAME_RE.match(p.name)
-        if not m:
+        if m:
+            day, month_name, year = m.groups()
+            month = _INDO_MONTHS.get(month_name.lower())
+            if month is None:
+                continue
+            dated.append(((int(year), month, int(day)), p))
             continue
-        day, month_name, year = m.groups()
-        month = _INDO_MONTHS.get(month_name.lower())
-        if month is None:
-            continue
-        dated.append(((int(year), month, int(day)), p))
+        m = _TOKO_GABUNGAN_LIVE_NAME_RE.match(p.name)
+        if m:
+            month_name, year = m.groups()
+            month = _INDO_MONTHS.get(month_name.lower())
+            if month is None:
+                continue
+            dated.append(((int(year), month, 99), p))
     if not dated:
         return None
     return max(dated, key=lambda x: x[0])[1]

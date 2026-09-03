@@ -131,7 +131,7 @@ with gc2:
         st.metric("File HOREKA aktif", horeka_gab_path.name)
         st.metric("Grup gabungan HOREKA", len(horeka_gab_map))
 
-st.caption("Lihat isi tiap grup gabungan HOREKA di halaman **Gabungan HOREKA**.")
+st.caption("Lihat isi tiap grup gabungan di halaman **Gabungan UMUM** / **Gabungan HOREKA**.")
 
 st.divider()
 

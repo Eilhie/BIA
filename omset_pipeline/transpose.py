@@ -606,6 +606,25 @@ def run_horeka_keg():
     _run_pool(args, "HOREKA WITH KEG")
 
 
+def run_custom(omshar_type: str, codes: list[str]):
+    """Transpose SKU INDIVIDUAL yang dipilih manual -- isolated dari 59 brand
+    rollup di atas (run_umum/run_horeka/run_horeka_keg/run_all), tidak
+    menyentuh/mengubah apa pun di sana. Tiap kode diperlakukan sebagai
+    "brand" satu-file sendiri (file_map = {code: [code]}), jadi output XLSX/
+    CSV-nya bernama kode SKU mentahnya sendiri -- otomatis tidak bentrok nama
+    dengan brand rollup asli (nama brand itu label manusia, bukan kode SKU
+    mentah). Efek samping yang justru jadi tujuan utama: process_brand()
+    menulis SKU_RAW cache per file yang dibaca (lihat write_sku_raw_csv()) --
+    begitu kode ini ditranspose sekali lewat sini, Detail SKU Brand Besar
+    otomatis dapat jalur cepatnya juga untuk kode itu, tanpa perlu ditambah
+    ke UMUM_FILE/HOREKA_FILE (yang mengubah brand ROLLUP resmi -- beda hal)."""
+    print(f"=== TRANSPOSE CUSTOM ({omshar_type}, {len(codes)} SKU dipilih manual) ===")
+    groups = [("DAPUL", DAPUL), ("LAPUL", LAPUL)] if omshar_type == "UMUM" else [("HOREKA", HOREKA)]
+    file_map = {code: [code] for code in codes}
+    args = [(omshar_type, code, file_map, groups, omshar_type) for code in codes]
+    _run_pool(args, "CUSTOM")
+
+
 def run_all():
     """[OPT-1] Mode 'all' = SATU Pool gabungan untuk UMUM + HOREKA +
     HOREKA WITH KEG, bukan 3 Pool terpisah berurutan. Menghapus overhead
@@ -631,7 +650,7 @@ def main():
         "mode",
         nargs="?",
         default=None,
-        choices=["umum", "horeka", "all"],
+        choices=["umum", "horeka", "horeka_keg", "all"],
     )
     args = parser.parse_args()
 
@@ -640,20 +659,26 @@ def main():
         print("Pilih mode transpose:")
         print("  [1] UMUM")
         print("  [2] HOREKA")
-        print("  [3] ALL (UMUM + HOREKA)")
-        pilihan = input("Pilihan (1/2/3): ").strip()
-        mode = {"1": "umum", "2": "horeka", "3": "all"}.get(pilihan)
+        print("  [3] HOREKA + KEG/PET")
+        print("  [4] ALL (UMUM + HOREKA + KEG/PET)")
+        pilihan = input("Pilihan (1/2/3/4): ").strip()
+        mode = {"1": "umum", "2": "horeka", "3": "horeka_keg", "4": "all"}.get(pilihan)
         if mode is None:
             print("Pilihan tidak dikenali, dibatalkan.")
             return
 
     # [OPT-1] mode "all" sekarang lewat run_all() (satu Pool gabungan),
     # bukan run_umum() + run_horeka() + run_horeka_keg() berurutan.
+    # "horeka" dan "horeka_keg" sengaja dipisah (bukan selalu dibundel seperti
+    # sebelumnya) -- pass KEG/PET tambahan itu ~15 brand ekstra yang tidak
+    # semua orang butuh tiap kali transpose HOREKA, jadi dibikin opsional.
     if mode == "all":
         run_all()
     elif mode == "umum":
         run_umum()
     elif mode == "horeka":
+        run_horeka()
+    elif mode == "horeka_keg":
         run_horeka()
         run_horeka_keg()
 
@@ -668,5 +693,11 @@ if __name__ == "__main__":
     # jalankan worker itu saja dan keluar -- JANGAN masuk ke main() biasa.
     if len(sys.argv) > 1 and sys.argv[1] == "_cutoff_worker":
         _cutoff_worker_main(sys.argv[2:])
+    elif len(sys.argv) > 1 and sys.argv[1] == "custom":
+        # transpose.py custom <UMUM|HOREKA> <CODE1,CODE2,...> -- dispatch khusus
+        # sama seperti _cutoff_worker di atas, karena run_custom() butuh 2 argumen
+        # tambahan (channel + daftar kode) yang tidak cocok dipaksakan ke argparse
+        # "mode" tunggal punya main().
+        run_custom(sys.argv[2], [c for c in sys.argv[3].split(",") if c])
     else:
         main()

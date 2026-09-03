@@ -43,6 +43,7 @@ PAGE_DEFS = [
     ("Sinkronisasi & Data", "pages/11_EAO_Sync.py", "EAO Sync", False),
     ("Sinkronisasi & Data", "pages/4_Atur_SKU_Sync.py", "Atur SKU Sync", False),
     ("Sinkronisasi & Data", "pages/10_Atur_Gabungan_HOREKA.py", "Gabungan HOREKA", False),
+    ("Sinkronisasi & Data", "pages/14_Atur_Gabungan_UMUM.py", "Gabungan UMUM", False),
     ("Sinkronisasi & Data", "pages/6_Cek_Cutoff_OMSHAR.py", "Cek Cutoff OMSHAR", False),
     ("Sinkronisasi & Data", "pages/12_Cukai_Kompetitor.py", "Cukai Kompetitor", False),
 

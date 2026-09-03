@@ -50,6 +50,14 @@ with st.sidebar:
     st.header("Daftar Outlet")
     list_type = st.radio("Grup", ["UMUM", "HOREKA"], horizontal=True, key="list_type")
 
+    # Toggle KEG/PET -- cuma relevan buat HOREKA (lihat want_keg di bawah, UMUM
+    # selalu diabaikan). Default True supaya perilaku lama (selalu tampil) tetap
+    # jadi default, tapi sekarang bisa dimatikan kalau tidak dibutuhkan.
+    with_keg_toggle = st.checkbox(
+        "Tampilkan KEG/PET (HOREKA)", value=True, key="with_keg_toggle",
+        help="Kalau dimatikan, laporan HOREKA cuma tampilkan brand dasar -- tanpa breakdown KEG/PET tambahan.",
+    )
+
     # Index outlet di-load SEKALI di sini (bukan cuma pas ada query teks) supaya
     # opsi filter Wilayah di bawah bisa langsung terisi -- aman karena sudah
     # di-cache 10 menit lewat get_outlet_index(), jadi biaya penuhnya cuma
@@ -100,10 +108,10 @@ with st.sidebar:
                     key=f"pick_{list_type}_{row['Site']}",
                     use_container_width=True,
                     on_click=pick_outlet,
-                    # HOREKA selalu pakai format With Keg secara default -- untuk UMUM
+                    # with_keg_toggle datang dari checkbox sidebar -- untuk UMUM
                     # flag ini otomatis diabaikan di bawah (want_keg = with_keg and
-                    # q_type == "HOREKA"), jadi aman selalu True di sini.
-                    args=(row["Site"], list_type, True, row["Outlet"], row["Wilayah"], q),
+                    # q_type == "HOREKA"), jadi nilainya tidak masalah untuk UMUM.
+                    args=(row["Site"], list_type, with_keg_toggle, row["Outlet"], row["Wilayah"], q),
                 )
     else:
         st.caption("Ketik nama/kode outlet, atau pilih wilayah, untuk mulai mencari.")
