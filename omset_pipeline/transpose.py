@@ -498,14 +498,26 @@ def process_brand(omshar_type, brand, file_map, groups, out_subdir):
 
     wrote_any = False
     for sheet_name, sheet_order in groups:
+        # [FIX] Brand >1 file (mis. KONIG DUNKEL = KLW640DK + KLW330DK) sebelumnya
+        # SELALU pakai header file PERTAMA di daftar, walau file lain di grup yang
+        # sama punya PERIODE lebih baru -- ditemukan nyata: KLW640DK (listed
+        # pertama) periode-nya 25 Ags di SEMUA 20 sheet wilayahnya (bukan sync
+        # basi -- server memang belum ada yang lebih baru untuk file itu), sementara
+        # KLW330DK (kedua) sudah 31 Ags, tapi cutoff brand yang ditampilkan tetap
+        # 25 Ags karena cuma baca file pertama. stack_sheets() SUDAH menangani ini
+        # untuk sheet WILAYAH dalam satu file (lihat docstring-nya) -- ini
+        # perluasannya ke lintas FILE untuk brand gabungan, pola yang sama persis.
         header = None
+        header_periode = None
         combined_rows = []
         for file_name, wb_in in file_wbs:
             h, rows = stack_sheets(wb_in, sheet_order)
             if h is None:
                 continue
-            if header is None:
+            h_periode = _parse_periode(h)
+            if header is None or (h_periode is not None and (header_periode is None or h_periode > header_periode)):
                 header = h
+                header_periode = h_periode
             combined_rows.extend(rows)
             per_file_rows[file_name].extend(rows)
 

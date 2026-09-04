@@ -46,6 +46,22 @@ TRANSPOSE_TOTALS = {
     "HOREKA + KEG/PET": _N_HOREKA_KEG,
     "ALL": _N_UMUM + _N_HOREKA_KEG,
 }
+# Total LANGKAH (brand x jumlah grup yang harus dibaca) per mode -- dipakai
+# progress bar GRANULAR, bukan cuma hitungan brand yang SEPENUHNYA kelar.
+# UMUM = 2 grup/brand (DAPUL+LAPUL), HOREKA/HOREKA+KEG = 1 grup/brand (cuma
+# HOREKA) -- lihat groups= di run_umum()/run_horeka()/run_horeka_keg() di
+# transpose.py. Brand di UMUM baru "kelar" (masuk hitungan TRANSPOSE_TOTALS
+# di atas) setelah KEDUA grupnya selesai -- makanya bar sebelumnya bisa
+# diam lama walau banyak grup individual sudah kelar dibaca satu-satu.
+_N_UMUM_STEPS = _N_UMUM * 2
+_N_HOREKA_BASE_STEPS = _N_HOREKA_BASE * 1
+_N_HOREKA_KEG_STEPS = len(_t.HOREKA_KEG_BRAND_ORDER) * 1
+TRANSPOSE_STEP_TOTALS = {
+    "UMUM": _N_UMUM_STEPS,
+    "HOREKA": _N_HOREKA_BASE_STEPS,
+    "HOREKA + KEG/PET": _N_HOREKA_BASE_STEPS + _N_HOREKA_KEG_STEPS,
+    "ALL": _N_UMUM_STEPS + _N_HOREKA_BASE_STEPS + _N_HOREKA_KEG_STEPS,
+}
 # Label radio (UI) -> argumen CLI transpose.py
 MODE_CLI_ARG = {
     "UMUM": "umum",
@@ -230,7 +246,10 @@ st.header("2. Transpose jadi CSV/XLSX")
 st.caption(f"Sumber dibaca dari `{DEST_DB}`, output ke `omset_pipeline\\output\\`.")
 
 
-def _spawn_transpose(cli_args: list[str], mode_label: str, total_override: int | None = None) -> None:
+def _spawn_transpose(
+    cli_args: list[str], mode_label: str,
+    total_override: int | None = None, step_total_override: int | None = None,
+) -> None:
     # PYTHONUNBUFFERED=1 wajib di env (bukan cuma flag -u ke proses utama) --
     # transpose.py jalanin multiprocessing.Pool, dan worker-nya di Windows di-spawn
     # sebagai proses python.exe baru yang cuma warisan ENV VAR dari induknya, bukan
@@ -258,6 +277,8 @@ def _spawn_transpose(cli_args: list[str], mode_label: str, total_override: int |
     }
     if total_override is not None:
         state["total_override"] = total_override
+    if step_total_override is not None:
+        state["step_total_override"] = step_total_override
     st.session_state["transpose_state"] = state
 
 
@@ -268,10 +289,15 @@ def _start_transpose(mode: str) -> None:
 def _start_transpose_custom(omshar_type: str, codes: list[str]) -> None:
     """Transpose SKU INDIVIDUAL yang dipilih manual -- isolated dari mode
     UMUM/HOREKA/ALL di atas (lihat run_custom() di transpose.py), tidak
-    mengubah brand rollup resmi apa pun. total_override dipakai karena
-    jumlah SKU di sini dinamis (sebanyak yang dipilih user), bukan angka
-    tetap dari TRANSPOSE_TOTALS."""
-    _spawn_transpose(["custom", omshar_type, ",".join(codes)], "CUSTOM", total_override=len(codes))
+    mengubah brand rollup resmi apa pun. total_override/step_total_override
+    dipakai karena jumlah SKU di sini dinamis (sebanyak yang dipilih user),
+    bukan angka tetap dari TRANSPOSE_TOTALS/TRANSPOSE_STEP_TOTALS -- UMUM
+    butuh 2 grup/kode (DAPUL+LAPUL), HOREKA cuma 1 (HOREKA saja)."""
+    groups_per_code = 2 if omshar_type == "UMUM" else 1
+    _spawn_transpose(
+        ["custom", omshar_type, ",".join(codes)], "CUSTOM",
+        total_override=len(codes), step_total_override=len(codes) * groups_per_code,
+    )
 
 
 def _list_all_skus(omshar_type: str) -> list[tuple[str, str]]:
@@ -297,15 +323,28 @@ def _brands_accounted_for(lines: list[str]) -> int:
     return sum(1 for l in lines if any(m in l for m in markers))
 
 
-def _read_steps_done(lines: list[str]) -> int:
-    """Hitung baris "{brand} {sheet}: N baris" -- satu per (brand, grup) yang
-    SUDAH selesai dibaca, ditulis LEBIH AWAL daripada 'Tersimpan XLSX :' (lihat
-    process_brand() di transpose.py: tiap grup dibaca+ditulis dulu, baru XLSX-nya
-    disimpan di akhir SETELAH SEMUA grup kelar). X/Y brand di atas sengaja tidak
-    diubah jadi granular per-grup (perlu tahu persis berapa grup per brand per
-    mode, gampang salah) -- ini cuma indikator TAMBAHAN biar kelihatan ada
-    aktivitas nyata selama window "0/Y brand" yang bisa beberapa menit lamanya."""
-    return sum(1 for l in lines if " baris" in l)
+def _group_steps_done(lines: list[str]) -> int:
+    """Hitung LANGKAH (brand, grup) yang sudah selesai -- true progress
+    granular, dipasangkan dengan TRANSPOSE_STEP_TOTALS. Satu langkah = satu
+    dari:
+      - "{brand} {sheet}: N baris" -- grup berhasil dibaca (lihat process_brand())
+      - "[SKIP] {brand} {sheet}: tidak ada sheet wilayah" -- grup itu SENDIRI
+        di-skip, tapi tetap "selesai" dari sisi progress (bukan pending)
+      - "[SKIP] {brand}: tidak ada file sumber ..." -- brand GAGAL total dari
+        awal (tidak per-grup) -- baris ini tidak menyebut berapa grup yang
+        seharusnya, jadi dihitung 1 langkah (aproksimasi, brand yang skip total
+        jarang terjadi dibanding yang berhasil normal, tidak butuh presisi persis)
+      - "[GAGAL] ..." -- brand crash di tengah proses, sama alasannya."""
+    steps = 0
+    for l in lines:
+        s = l.strip()
+        if s.startswith("SKU_RAW"):
+            continue
+        if s.startswith("[SKIP]") or s.startswith("[GAGAL]"):
+            steps += 1
+        elif " baris" in s:
+            steps += 1
+    return steps
 
 
 @st.fragment(run_every=1)
@@ -328,25 +367,29 @@ def _transpose_progress():
     # sebelum baris progress pertama muncul (baca .xls mentah itu sendiri lambat,
     # bukan bug), jadi timer+ETA di sini penting supaya kelihatan "masih jalan"
     # dan bukan "macet" selama window itu.
+    #
+    # [FIX] Bar SEBELUMNYA digerakkan oleh "X/Y brand" -- brand baru terhitung
+    # setelah SEMUA grupnya (DAPUL+LAPUL utk UMUM) kelar dibaca, jadi bar bisa
+    # diam di 0% selama beberapa menit walau banyak grup individual sudah
+    # kelar. Sekarang bar+ETA digerakkan oleh LANGKAH granular (per grup, lihat
+    # _group_steps_done()/TRANSPOSE_STEP_TOTALS) -- teks "X/Y brand" tetap
+    # ditampilkan apa adanya (lebih familiar), tapi bar-nya sendiri gerak
+    # sehalus jumlah grup yang benar-benar sudah kelar dibaca.
     elapsed = time.time() - state["start_time"]
     total = state.get("total_override") or TRANSPOSE_TOTALS.get(state.get("mode"), 0)
     done = _brands_accounted_for(state["lines"])
+    step_total = state.get("step_total_override") or TRANSPOSE_STEP_TOTALS.get(state.get("mode"), 0)
+    step_done = _group_steps_done(state["lines"])
+
     if not state["finished"] and total:
         eta_txt = ""
-        if done > 0:
-            eta_sec = (elapsed / done) * (total - done)
+        if step_done > 0 and step_total:
+            eta_sec = (elapsed / step_done) * (step_total - step_done)
             eta_txt = f" · estimasi sisa {_fmt_duration(eta_sec)}"
         st.caption(f"⏱ {_fmt_duration(elapsed)} berjalan · {done}/{total} brand selesai{eta_txt}")
-        st.progress(min(done / total, 1.0))
-        if done == 0:
-            # Brand baru terhitung "selesai" di atas setelah SEMUA grupnya kelar dibaca
-            # (lihat process_brand()) -- baca satu file mentah ~225 detik, jadi normal
-            # X/Y masih 0 selama beberapa menit pertama. Indikator ini nunjukin aktivitas
-            # NYATA yang sudah terjadi (tiap grup yang sudah kelar dibaca) selama window itu,
-            # supaya tidak kelihatan macet padahal jalan.
-            steps = _read_steps_done(state["lines"])
-            if steps:
-                st.caption(f"📄 {steps} langkah baca (per grup) sudah selesai -- brand pertama akan tercatat begitu SEMUA grupnya kelar.")
+        st.progress(min(step_done / step_total, 1.0) if step_total else 0.0)
+        if step_total:
+            st.caption(f"📄 {step_done}/{step_total} langkah baca (per grup) -- ini yang menggerakkan bar di atas.")
     else:
         st.caption(f"⏱ Total waktu: {_fmt_duration(elapsed)}")
 
