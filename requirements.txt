@@ -1,0 +1,9 @@
+streamlit
+pandas
+openpyxl
+xlrd
+matplotlib
+bcrypt
+extra-streamlit-components
+PyYAML
+py7zr

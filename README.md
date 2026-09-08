@@ -67,9 +67,11 @@ D:\SDAAREA\
 
 ## Prasyarat
 
-Python 3.x dengan library berikut:
+Python 3.x dengan dependency di `requirements.txt` (`streamlit`, `pandas`,
+`openpyxl`, `xlrd`, `matplotlib`, `bcrypt`, `extra-streamlit-components`,
+`PyYAML`, `py7zr`):
 ```
-pip install xlrd openpyxl pandas matplotlib streamlit bcrypt pyyaml
+pip install -r requirements.txt
 ```
 
 Akses jaringan ke `\\10.4.1.25\Bev\OMSHAR`
