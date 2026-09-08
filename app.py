@@ -66,5 +66,36 @@ if not sections:
     st.error(f"Akun **{user['username']}** (Level 0) belum diberi akses ke halaman manapun. Hubungi Admin.")
     st.stop()
 
+# Identitas visual sama seperti layar login (auth._inject_auth_styles()) dan
+# Home (pages/15_Home.py) -- font + aksen emas, supaya menu sidebar tidak
+# terasa seperti Streamlit bawaan begitu saja.
+st.sidebar.markdown(
+    """
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@500;600&display=swap">
+    <style>
+      section[data-testid="stSidebar"] { border-right: 1px solid rgba(200,134,42,0.18); }
+      .sb-brand {
+        font-family: 'Bebas Neue', Impact, sans-serif; font-size: 30px;
+        letter-spacing: 0.02em; color: #c8862a; line-height: 1; padding: 4px 0 14px;
+      }
+      section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a,
+      section[data-testid="stSidebar"] div[data-testid="stNavSectionHeader"] {
+        border-radius: 6px;
+      }
+      section[data-testid="stSidebar"] a:hover {
+        background: rgba(200,134,42,0.10) !important;
+      }
+      section[data-testid="stSidebar"] a[aria-current="page"] {
+        background: rgba(200,134,42,0.16) !important;
+        font-weight: 600;
+      }
+    </style>
+    <div class="sb-brand">OMSET SEEKER</div>
+    """,
+    unsafe_allow_html=True,
+)
+
 nav = st.navigation(sections)
 nav.run()

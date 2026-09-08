@@ -123,105 +123,210 @@ def _try_restore_from_cookie():
     st.session_state["auth_token"] = token
 
 
+def _inject_auth_styles():
+    """CSS + font sama seperti Home (pages/15_Home.py) -- dipakai di layar
+    login/bootstrap supaya identitas visualnya konsisten sejak titik masuk
+    PERTAMA user ke app, bukan cuma di halaman sesudah login."""
+    st.markdown(
+        """
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@500;600;700&display=swap">
+        <style>
+          /* Tidak ada apa pun buat ditaruh di sidebar sebelum login (nav
+          halaman baru dibangun app.py SESUDAH auth.get_current_user() lolos)
+          -- kontrol collapse + area sidebar kosong disembunyikan total di
+          layar ini, biar layar login benar-benar bersih, bukan cuma kosong. */
+          [data-testid="collapsedControl"] { display: none !important; }
+          section[data-testid="stSidebar"] { display: none !important; }
+
+          .auth-hero { text-align: center; margin: 36px 0 4px; }
+          .auth-hero .brand {
+            font-family: 'Bebas Neue', Impact, sans-serif; font-size: 46px;
+            letter-spacing: 0.02em; color: #c8862a; line-height: 1;
+          }
+          .auth-hero .tagline {
+            font-family: 'JetBrains Mono', monospace; font-size: 12px;
+            opacity: 0.6; margin-top: 8px; letter-spacing: 0.02em;
+          }
+          div[data-testid="stForm"] {
+            border: 1px solid rgba(120,110,90,0.22) !important;
+            border-radius: 12px !important;
+            padding: 26px 28px 12px !important;
+            background: linear-gradient(180deg, rgba(200,134,42,0.05), rgba(200,134,42,0.01));
+          }
+          div[data-testid="stFormSubmitButton"] button[kind="primary"] {
+            background: linear-gradient(90deg, #c8862a, #e0a447);
+            border: none; font-weight: 600;
+          }
+          div[data-testid="stFormSubmitButton"] button[kind="primary"]:hover {
+            filter: brightness(1.08);
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _bootstrap_admin_form():
     """Tampil HANYA kalau belum ada user sama sekali -- buat akun Admin
     (level 5) pertama. Setelah itu user berikutnya dibuat lewat halaman
     Kelola User (level 5), bukan lewat layar ini lagi."""
-    st.title("Setup Awal - Buat Akun Admin")
-    st.caption(
-        "Belum ada akun sama sekali di sistem ini. Buat akun Admin (level 5) "
-        "pertama untuk login dan mengelola akun user lain nanti."
+    _inject_auth_styles()
+    st.markdown(
+        '<div class="auth-hero"><div class="brand">OMSET SEEKER</div>'
+        '<div class="tagline">SETUP AWAL &mdash; BUAT AKUN ADMIN</div></div>',
+        unsafe_allow_html=True,
     )
-    with st.form("bootstrap_form"):
-        username = st.text_input("Username Admin")
-        password = st.text_input("Password", type="password")
-        password2 = st.text_input("Ulangi Password", type="password")
-        submitted = st.form_submit_button("Buat Akun Admin", type="primary")
+    _, mid, _ = st.columns([1, 2, 1])
+    with mid:
+        st.caption(
+            "Belum ada akun sama sekali di sistem ini. Buat akun Admin (level 5) "
+            "pertama untuk login dan mengelola akun user lain nanti."
+        )
+        with st.form("bootstrap_form"):
+            username = st.text_input("Username Admin")
+            password = st.text_input("Password", type="password")
+            password2 = st.text_input("Ulangi Password", type="password")
+            submitted = st.form_submit_button("Buat Akun Admin", type="primary")
 
-    if submitted:
-        if not username.strip() or not password:
-            st.error("Username dan password wajib diisi.")
-        elif password != password2:
-            st.error("Password dan ulangi password tidak sama.")
-        elif len(password) < 6:
-            st.error("Password minimal 6 karakter.")
-        else:
-            db.create_user(username.strip(), _hash_password(password), 5)
-            db.log_action(username.strip(), "buat_akun_admin_pertama", "")
-            st.success("Akun Admin berhasil dibuat. Silakan login.")
-            time.sleep(1)
-            st.rerun()
+        if submitted:
+            if not username.strip() or not password:
+                st.error("Username dan password wajib diisi.")
+            elif password != password2:
+                st.error("Password dan ulangi password tidak sama.")
+            elif len(password) < 6:
+                st.error("Password minimal 6 karakter.")
+            else:
+                db.create_user(username.strip(), _hash_password(password), 5)
+                db.log_action(username.strip(), "buat_akun_admin_pertama", "")
+                st.success("Akun Admin berhasil dibuat. Silakan login.")
+                time.sleep(1)
+                st.rerun()
     st.stop()
 
 
 def _login_form():
-    st.title("Login")
-    st.caption("Masuk untuk mengakses OMSET Seeker dan tools terkait. Login bertahan 24 jam di browser ini.")
-    with st.form("login_form"):
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Masuk", type="primary")
+    _inject_auth_styles()
+    st.markdown(
+        '<div class="auth-hero"><div class="brand">OMSET SEEKER</div>'
+        '<div class="tagline">CARI OUTLET &middot; CEK KLAIM SKU &middot; PANTAU PROGRES KAMU</div></div>',
+        unsafe_allow_html=True,
+    )
+    _, mid, _ = st.columns([1, 2, 1])
+    with mid:
+        st.caption("Login bertahan 24 jam di browser ini.")
+        with st.form("login_form"):
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("Masuk", type="primary")
 
-    if submitted:
-        uname = username.strip()
-        if db.count_recent_failed_attempts(uname, LOCKOUT_WINDOW_SEC) >= MAX_LOGIN_ATTEMPTS:
-            st.error(
-                f"Terlalu banyak percobaan gagal untuk username ini. "
-                f"Coba lagi dalam beberapa menit."
-            )
-            db.log_login_attempt(uname, False)
-        else:
-            user = db.get_user(uname)
-            if user and user["active"] and _check_password(password, user["password_hash"]):
-                db.log_login_attempt(uname, True)
-                db.log_action(uname, "login", "")
-                _start_session(user["username"], user["level"])
-                st.rerun()
-            else:
+        if submitted:
+            uname = username.strip()
+            if db.count_recent_failed_attempts(uname, LOCKOUT_WINDOW_SEC) >= MAX_LOGIN_ATTEMPTS:
+                st.error(
+                    f"Terlalu banyak percobaan gagal untuk username ini. "
+                    f"Coba lagi dalam beberapa menit."
+                )
                 db.log_login_attempt(uname, False)
-                if user and not user["active"]:
-                    st.error("Akun ini sudah dinonaktifkan. Hubungi Admin.")
-                else:
-                    st.error("Username atau password salah.")
-
-    with st.expander("Belum punya akun? Request di sini"):
-        st.caption(
-            "Isi username dan password yang Anda inginkan -- setelah disetujui Admin "
-            "(lihat halaman Kelola User), langsung bisa login pakai password ini juga, "
-            "tidak perlu tanya password ke siapa pun."
-        )
-        with st.form("request_account_form", clear_on_submit=True):
-            req_username = st.text_input("Username", key="req_username")
-            req_password = st.text_input("Password", type="password", key="req_password")
-            req_password2 = st.text_input("Ulangi Password", type="password", key="req_password2")
-            req_note = st.text_input("Untuk keperluan apa? (opsional)", key="req_note")
-            req_submitted = st.form_submit_button("Kirim Request")
-
-        if req_submitted:
-            ru = req_username.strip()
-            if not ru or not req_password:
-                st.error("Username dan password wajib diisi.")
-            elif req_password != req_password2:
-                st.error("Password dan ulangi password tidak sama.")
-            elif len(req_password) < 6:
-                st.error("Password minimal 6 karakter.")
-            elif db.get_user(ru) is not None:
-                st.error(f"Username '{ru}' sudah dipakai. Coba username lain.")
-            elif db.has_pending_request(ru):
-                st.warning(f"Sudah ada request pending untuk username '{ru}' -- tunggu Admin memproses.")
             else:
-                db.create_account_request(ru, _hash_password(req_password), req_note.strip())
-                st.success("Request terkirim. Hubungi Admin untuk mempercepat approval kalau perlu.")
+                user = db.get_user(uname)
+                if user and user["active"] and _check_password(password, user["password_hash"]):
+                    db.log_login_attempt(uname, True)
+                    db.log_action(uname, "login", "")
+                    _start_session(user["username"], user["level"])
+                    st.rerun()
+                else:
+                    db.log_login_attempt(uname, False)
+                    if user and not user["active"]:
+                        st.error("Akun ini sudah dinonaktifkan. Hubungi Admin.")
+                    else:
+                        st.error("Username atau password salah.")
+
+        with st.expander("Belum punya akun? Request di sini"):
+            st.caption(
+                "Isi username dan password yang Anda inginkan -- setelah disetujui Admin "
+                "(lihat halaman Kelola User), langsung bisa login pakai password ini juga, "
+                "tidak perlu tanya password ke siapa pun."
+            )
+            with st.form("request_account_form", clear_on_submit=True):
+                req_username = st.text_input("Username", key="req_username")
+                req_password = st.text_input("Password", type="password", key="req_password")
+                req_password2 = st.text_input("Ulangi Password", type="password", key="req_password2")
+                req_note = st.text_input("Untuk keperluan apa? (opsional)", key="req_note")
+                req_submitted = st.form_submit_button("Kirim Request")
+
+            if req_submitted:
+                ru = req_username.strip()
+                if not ru or not req_password:
+                    st.error("Username dan password wajib diisi.")
+                elif req_password != req_password2:
+                    st.error("Password dan ulangi password tidak sama.")
+                elif len(req_password) < 6:
+                    st.error("Password minimal 6 karakter.")
+                elif db.get_user(ru) is not None:
+                    st.error(f"Username '{ru}' sudah dipakai. Coba username lain.")
+                elif db.has_pending_request(ru):
+                    st.warning(f"Sudah ada request pending untuk username '{ru}' -- tunggu Admin memproses.")
+                else:
+                    db.create_account_request(ru, _hash_password(req_password), req_note.strip())
+                    st.success("Request terkirim. Hubungi Admin untuk mempercepat approval kalau perlu.")
     st.stop()
+
+
+def _inject_global_theme():
+    """Font + aksen emas yang SAMA dengan layar login (_inject_auth_styles())
+    dan sidebar (app.py) -- dipanggil dari _render_user_bar(), yang jalan di
+    SETIAP halaman lewat require_level(), jadi satu tempat ini otomatis
+    ke-apply ke semua 16 halaman tanpa perlu edit file per halaman satu-satu.
+
+    SENGAJA konservatif -- cuma elemen dekoratif generik (font, tombol utama,
+    progress bar) yang disentuh. Warna semantik (merah error, hijau success,
+    kuning warning) TIDAK disentuh -- itu bawa makna fungsional, bukan
+    dekorasi, dan halaman admin/ops (Sync & Transpose, Audit Trail, dsb)
+    butuh warna itu tetap jelas apa adanya, bukan ketimpa aksen emas."""
+    st.markdown(
+        """
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@500;600;700&display=swap">
+        <style>
+          button[kind="primary"], button[kind="primaryFormSubmit"] {
+            background: linear-gradient(90deg, #c8862a, #e0a447) !important;
+            border: none !important; font-weight: 600 !important;
+          }
+          button[kind="primary"]:hover, button[kind="primaryFormSubmit"]:hover {
+            filter: brightness(1.08);
+          }
+          div[data-testid="stProgress"] > div > div > div {
+            background-color: #c8862a !important;
+          }
+          [data-testid="stMetricValue"] { font-family: 'JetBrains Mono', monospace; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _render_user_bar(user: dict):
     """Render di AREA UTAMA (bukan sidebar) di baris paling atas tiap halaman,
     sebelum st.title() halaman itu sendiri -- sengaja bukan di sidebar karena
     posisinya selalu terasa aneh di sana (nempel di bawah nav, jauh dari nav
-    di scroll panjang, dsb)."""
+    di scroll panjang, dsb).
+
+    SENGAJA tidak lagi menampilkan angka Level RBAC di sini (dulu "Level 3")
+    -- app ini sekarang juga punya Level gamifikasi (Home/Player Progress,
+    lihat pages/15_Home.py) yang levelnya angka juga; menampilkan KEDUANYA
+    dengan kata yang sama, di setiap halaman, bikin user bingung mana yang
+    mana. Peran akses tetap kelihatan sebagai LABEL (mis. "Admin") kalau
+    level itu punya label di config.yaml -- cuma angkanya yang disembunyikan
+    dari bar umum ini. Admin tetap lihat angka aslinya di halaman Kelola User/
+    Audit Trail (level_display() masih dipakai di sana, itu memang tempatnya)."""
+    _inject_global_theme()
     c1, c2 = st.columns([6, 1])
-    c1.caption(f"Halo, **{user['username']}** ({level_display(user['level'])})")
+    role_label = level_label(user["level"])
+    badge = f" · {role_label}" if role_label else ""
+    c1.caption(f"Halo, **{user['username']}**{badge}")
     if c2.button("Logout", key="auth_logout_btn"):
         db.log_action(user["username"], "logout", "")
         _end_session()

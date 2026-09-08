@@ -66,6 +66,12 @@ def init_db():
         existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
         if "leaderboard_opt_in" not in existing_cols:
             conn.execute("ALTER TABLE users ADD COLUMN leaderboard_opt_in INTEGER NOT NULL DEFAULT 0")
+        if "last_seen_level" not in existing_cols:
+            # Dimulai dari 0 (bukan 1) SENGAJA -- supaya user yang sudah lama
+            # aktif sebelum fitur ini ada tetap dapat SATU perayaan level-up
+            # begitu Home pertama kali dibuka (naik dari 0 -> level asli
+            # mereka sekarang), bukan langsung dianggap "sudah pernah dilihat".
+            conn.execute("ALTER TABLE users ADD COLUMN last_seen_level INTEGER NOT NULL DEFAULT 0")
         conn.execute('''
             CREATE TABLE IF NOT EXISTS sessions (
                 token TEXT PRIMARY KEY,
@@ -324,6 +330,39 @@ XP_WEIGHTS = {
 }
 
 
+def get_leaderboard_opted_in_users() -> list[str]:
+    """Semua username yang opt-in -- sumber KEBENARAN buat siapa yang muncul
+    di leaderboard, BUKAN diturunkan dari "siapa yang punya baris access_log
+    di periode ini" (itu bikin user yang opt-in tapi kebetulan tidak aktif
+    minggu/bulan ini DIAM-DIAM HILANG dari papan, bukan tampil 0 XP -- beda
+    jauh, yang kedua jujur soal keadaannya, yang pertama kelihatan seperti bug)."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT username FROM users WHERE leaderboard_opt_in = 1"
+        ).fetchall()
+        return [r[0] for r in rows]
+
+
+def get_and_bump_last_seen_level(username: str, current_level: int) -> int:
+    """Return level TERAKHIR YANG PERNAH DILIHAT user ini, lalu update ke
+    current_level kalau berbeda -- dipanggil SEKALI per load Home. Caller
+    (pages/15_Home.py) membandingkan return value ini ke current_level:
+    beda -> baru saja naik level, tampilkan perayaan. Update-lalu-return
+    dalam SATU koneksi supaya tidak ada celah dua request bareng saling
+    menimpa (kecil kemungkinannya di app internal ini, tapi murah dicegah)."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT last_seen_level FROM users WHERE username = ?", (username,)
+        ).fetchone()
+        last_seen = row[0] if row else current_level
+        if last_seen != current_level:
+            conn.execute(
+                "UPDATE users SET last_seen_level = ? WHERE username = ?",
+                (current_level, username),
+            )
+        return last_seen
+
+
 def get_leaderboard_opt_in(username: str) -> bool:
     with get_connection() as conn:
         row = conn.execute(
@@ -340,23 +379,47 @@ def set_leaderboard_opt_in(username: str, opt_in: bool) -> None:
         )
 
 
-def get_user_action_counts(username: str) -> dict[str, int]:
-    """{action: count} untuk SATU user -- input buat compute_xp()."""
+def leaderboard_period_bounds(period: str) -> str:
+    """'since' buat XP periode tertentu -- "" (semua waktu), atau awal minggu
+    kalender (Senin 00:00) / awal bulan kalender (tanggal 1, 00:00). Reset di
+    tanggal TETAP (bukan rolling 7/30 hari terakhir) SENGAJA -- leaderboard
+    yang mereset di jadwal tetap punya titik "mulai lagi dari nol" yang jelas
+    buat semua orang bareng-bareng, rolling window tidak pernah benar-benar
+    reset, cuma bergeser pelan-pelan."""
+    now = datetime.now()
+    if period == "weekly":
+        monday = now - timedelta(days=now.weekday())
+        return str(monday.replace(hour=0, minute=0, second=0, microsecond=0))
+    if period == "monthly":
+        return str(now.replace(day=1, hour=0, minute=0, second=0, microsecond=0))
+    return ""
+
+
+def get_user_action_counts(username: str, since: str = "") -> dict[str, int]:
+    """{action: count} untuk SATU user -- input buat compute_xp(). `since`
+    kosong = semua waktu, atau hasil leaderboard_period_bounds()."""
+    query = "SELECT action, COUNT(*) FROM access_log WHERE username = ?"
+    params: list = [username]
+    if since:
+        query += " AND timestamp >= ?"
+        params.append(since)
+    query += " GROUP BY action"
     with get_connection() as conn:
-        rows = conn.execute(
-            "SELECT action, COUNT(*) FROM access_log WHERE username = ? GROUP BY action",
-            (username,),
-        ).fetchall()
+        rows = conn.execute(query, params).fetchall()
         return dict(rows)
 
 
-def get_all_users_action_counts() -> dict[str, dict[str, int]]:
+def get_all_users_action_counts(since: str = "") -> dict[str, dict[str, int]]:
     """{username: {action: count}} untuk SEMUA user -- input leaderboard, satu
-    query gantiin N query per user."""
+    query gantiin N query per user. `since` sama seperti get_user_action_counts()."""
+    query = "SELECT username, action, COUNT(*) c FROM access_log"
+    params: list = []
+    if since:
+        query += " WHERE timestamp >= ?"
+        params.append(since)
+    query += " GROUP BY username, action"
     with get_connection() as conn:
-        rows = conn.execute(
-            "SELECT username, action, COUNT(*) c FROM access_log GROUP BY username, action"
-        ).fetchall()
+        rows = conn.execute(query, params).fetchall()
     out: dict[str, dict[str, int]] = {}
     for username, action, c in rows:
         out.setdefault(username, {})[action] = c
@@ -367,52 +430,21 @@ def compute_xp(action_counts: dict[str, int]) -> int:
     return sum(XP_WEIGHTS.get(action, 0) * count for action, count in action_counts.items())
 
 
-# Nama, bukan angka -- SENGAJA. "Level" di app ini sudah berarti peran akses
-# (0-5, lihat auth.py/config.yaml, "Level 5 = Admin"). Progres gamifikasi
-# butuh istilah SENDIRI supaya dua hal yang beda sama sekali (peran akses
-# vs seberapa aktif seseorang pakai app) tidak pernah kelihatan seperti hal
-# yang sama di halaman yang sama. Ambang batas dipilih lewat data nyata
-# access_log.db (7 user asli, XP 80-13993) supaya sebaran rank-nya benar-benar
-# kepakai, bukan cuma satu rank yang keisi semua orang.
-RANKS = [
-    ("Pemula", 0),
-    ("Terampil", 150),
-    ("Berpengalaman", 500),
-    ("Ahli", 1000),
-    ("Master", 2500),
-    ("Legenda", 5000),
-]
-
-
-def xp_to_rank(xp: int) -> tuple[str, int, int | None]:
-    """(nama_rank, xp_ke_rank_ini, xp_dibutuhkan_ke_rank_berikutnya -- None
-    kalau sudah rank tertinggi, tidak ada plafon lagi)."""
-    idx = 0
-    for i, (_, threshold) in enumerate(RANKS):
-        if xp >= threshold:
-            idx = i
-    name, cur_threshold = RANKS[idx]
-    if idx + 1 < len(RANKS):
-        return name, xp - cur_threshold, RANKS[idx + 1][1] - cur_threshold
-    return name, xp - cur_threshold, None
-
-
-def login_streak_days(username: str) -> int:
-    """Hitung mundur dari HARI INI, berapa hari BERTURUT-TURUT ada minimal
-    satu 'login' -- putus begitu ketemu satu hari kosong (termasuk kalau
-    hari ini belum login sama sekali -- streak 0, bukan dianggap masih jalan)."""
-    with get_connection() as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT date(timestamp) FROM access_log WHERE username = ? AND action = 'login'",
-            (username,),
-        ).fetchall()
-    login_dates = {r[0] for r in rows}
-    streak = 0
-    day = datetime.now().date()
-    while day.isoformat() in login_dates:
-        streak += 1
-        day -= timedelta(days=1)
-    return streak
+# Angka, seperti level di game pada umumnya -- ini SEKARANG aman dipakai lagi
+# karena RBAC (peran akses, 0-5) sudah tidak lagi ditampilkan sebagai "Level N"
+# di bar umum tiap halaman (lihat auth.py: _render_user_bar() sekarang cuma
+# tampilkan label peran, mis. "Admin", bukan angkanya). Jadi kata "Level" di
+# app ini sekarang cuma berarti SATU hal buat user: progres gamifikasi.
+def xp_to_level(xp: int) -> tuple[int, int, int]:
+    """(level, xp_ke_level_ini, xp_dibutuhkan_buat_naik) -- level N butuh XP
+    kumulatif >= 50*N*(N+1) (kurva naik: Lv1->2 butuh 100, Lv2->3 butuh 200
+    LAGI, Lv3->4 butuh 300 LAGI, dst -- makin tinggi level makin lama)."""
+    level = 1
+    while 50 * level * (level + 1) <= xp:
+        level += 1
+    prev_threshold = 50 * (level - 1) * level
+    next_threshold = 50 * level * (level + 1)
+    return level, xp - prev_threshold, next_threshold - prev_threshold
 
 
 def create_session(token: str, username: str, expires_at_iso: str) -> None:
