@@ -31,7 +31,8 @@ user = auth.get_current_user()
 # (section buat grouping di sidebar, path relatif ke file ini, judul di menu &
 # tab browser, jadikan default landing page)
 PAGE_DEFS = [
-    ("Utama", "omset_search_app.py", "Omset Seeker", True),
+    ("Utama", "pages/15_Home.py", "Home", True),
+    ("Utama", "omset_search_app.py", "Omset Seeker", False),
     ("Utama", "pages/5_Outlet_Lapisan_MClub.py", "Outlet Lapisan MClub", False),
     ("Utama", "pages/3_Cek_Klaim_SKU.py", "Cek Klaim SKU", False),
     ("Utama", "pages/7_Detail_SKU_Brand_Besar.py", "Detail SKU Brand Besar", False),

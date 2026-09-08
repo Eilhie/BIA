@@ -60,6 +60,12 @@ def init_db():
                 created_at TEXT NOT NULL
             )
         ''')
+        # [Home/gamification] kolom baru di tabel yang sudah lama ada -- SQLite
+        # tidak punya "ADD COLUMN IF NOT EXISTS", jadi dicek manual lewat
+        # PRAGMA supaya init_db() tetap aman dipanggil berulang kali.
+        existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "leaderboard_opt_in" not in existing_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN leaderboard_opt_in INTEGER NOT NULL DEFAULT 0")
         conn.execute('''
             CREATE TABLE IF NOT EXISTS sessions (
                 token TEXT PRIMARY KEY,
@@ -303,6 +309,92 @@ def set_user_active(username: str, active: bool) -> None:
 def set_user_password(username: str, password_hash: str) -> None:
     with get_connection() as conn:
         conn.execute('UPDATE users SET password_hash = ? WHERE username = ?', (password_hash, username))
+
+
+# ── Home / gamification (Player Progress) ────────────────────────────────────
+# Opt-in leaderboard + XP/level computed straight from access_log -- nothing
+# new to instrument, every action counted here is already logged today by
+# auth.py/omset_search_app.py. See pages/15_Home.py.
+
+XP_WEIGHTS = {
+    "login": 5,
+    "cari_outlet": 2,
+    "lihat_outlet": 3,
+    "buka_halaman": 5,
+}
+
+
+def get_leaderboard_opt_in(username: str) -> bool:
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT leaderboard_opt_in FROM users WHERE username = ?", (username,)
+        ).fetchone()
+        return bool(row[0]) if row else False
+
+
+def set_leaderboard_opt_in(username: str, opt_in: bool) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE users SET leaderboard_opt_in = ? WHERE username = ?",
+            (int(opt_in), username),
+        )
+
+
+def get_user_action_counts(username: str) -> dict[str, int]:
+    """{action: count} untuk SATU user -- input buat compute_xp()."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT action, COUNT(*) FROM access_log WHERE username = ? GROUP BY action",
+            (username,),
+        ).fetchall()
+        return dict(rows)
+
+
+def get_all_users_action_counts() -> dict[str, dict[str, int]]:
+    """{username: {action: count}} untuk SEMUA user -- input leaderboard, satu
+    query gantiin N query per user."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT username, action, COUNT(*) c FROM access_log GROUP BY username, action"
+        ).fetchall()
+    out: dict[str, dict[str, int]] = {}
+    for username, action, c in rows:
+        out.setdefault(username, {})[action] = c
+    return out
+
+
+def compute_xp(action_counts: dict[str, int]) -> int:
+    return sum(XP_WEIGHTS.get(action, 0) * count for action, count in action_counts.items())
+
+
+def xp_to_level(xp: int) -> tuple[int, int, int]:
+    """(level, xp_ke_level_ini, xp_dibutuhkan_buat_naik) -- level N butuh XP
+    kumulatif >= 50*N*(N+1) (kurva naik: Lv1->2 butuh 100, Lv2->3 butuh 200
+    LAGI, Lv3->4 butuh 300 LAGI, dst -- makin tinggi level makin lama)."""
+    level = 1
+    while 50 * level * (level + 1) <= xp:
+        level += 1
+    prev_threshold = 50 * (level - 1) * level
+    next_threshold = 50 * level * (level + 1)
+    return level, xp - prev_threshold, next_threshold - prev_threshold
+
+
+def login_streak_days(username: str) -> int:
+    """Hitung mundur dari HARI INI, berapa hari BERTURUT-TURUT ada minimal
+    satu 'login' -- putus begitu ketemu satu hari kosong (termasuk kalau
+    hari ini belum login sama sekali -- streak 0, bukan dianggap masih jalan)."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT date(timestamp) FROM access_log WHERE username = ? AND action = 'login'",
+            (username,),
+        ).fetchall()
+    login_dates = {r[0] for r in rows}
+    streak = 0
+    day = datetime.now().date()
+    while day.isoformat() in login_dates:
+        streak += 1
+        day -= timedelta(days=1)
+    return streak
 
 
 def create_session(token: str, username: str, expires_at_iso: str) -> None:
