@@ -178,6 +178,99 @@ _DISPLAY_OVERRIDE = {
 }
 
 
+def _read_worker(args: tuple) -> tuple:
+    omshar_type, sku_code, sheet_order = args
+    t0 = time.time()
+    rows = read_sku_pruned(omshar_type, sku_code, sheet_order)
+    return sku_code, rows, time.time() - t0
+
+
+def build_channel_db_parallel(omshar_type: str, sku_plan: dict, out_path: Path, max_workers: int = 20) -> dict:
+    """Sama seperti build_channel_db(), tapi baca SEMUA sku secara PARALEL
+    (multiprocessing.Pool, pola sama persis dengan transpose.py's _run_pool)
+    -- build_channel_db() aslinya loop for sequential murni, yang untuk
+    seluruh channel (~100+ kode) berarti bisa 1 jam+ dijumlah satu-satu.
+    Insert ke SQLite tetap SEQUENTIAL di proses utama setelah semua baca
+    selesai -- SQLite tidak aman ditulis dari banyak proses sekaligus, tapi
+    insert sendiri jauh lebih cepat dari baca file mentah (xlrd), jadi aman
+    dijadikan satu-satunya bottleneck yang tersisa."""
+    from multiprocessing import Pool
+
+    sheet_order = t.DAPUL + t.LAPUL if omshar_type == "UMUM" else t.HOREKA
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = out_path.with_name(f".{out_path.name}.{uuid.uuid4().hex}.tmp")
+
+    args = [(omshar_type, sku_code, sheet_order) for sku_code in sku_plan]
+    n_workers = min(max_workers, os.cpu_count() or max_workers, len(args))
+    print(f"Paralel: {n_workers} proses untuk {len(args)} SKU")
+    with Pool(processes=n_workers) as pool:
+        results = pool.map(_read_worker, args)
+
+    con = sqlite3.connect(tmp_path)
+    try:
+        for ddl in schema_ddl():
+            con.execute(ddl)
+
+        brand_ids: dict[str, int] = {}
+        outlet_ids: dict[str, int] = {}
+        stats = {"skus": 0, "outlets": 0, "fact_rows": 0, "read_seconds": 0.0}
+
+        for sku_code, rows, read_time in results:
+            stats["read_seconds"] += read_time
+            if not rows:
+                continue
+            brand, is_rollup = sku_plan[sku_code]
+            if brand not in brand_ids:
+                cur = con.execute(
+                    "INSERT INTO dim_brand (omshar_type, brand) VALUES (?, ?)",
+                    (omshar_type, brand),
+                )
+                brand_ids[brand] = cur.lastrowid
+            brand_id = brand_ids[brand]
+
+            cur = con.execute(
+                "INSERT INTO dim_sku (omshar_type, sku_code, brand_id, is_rollup) VALUES (?, ?, ?, ?)",
+                (omshar_type, sku_code, brand_id, is_rollup),
+            )
+            sku_id = cur.lastrowid
+            stats["skus"] += 1
+
+            fact_batch = []
+            for row in rows:
+                site = str(row[COL_SITE]).strip()
+                if site not in outlet_ids:
+                    cur2 = con.execute(
+                        "INSERT INTO dim_outlet (site, wilayah, outlet, propinsi, kota, kecamatan, alamat) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (site, row[COL_WIL], row[COL_CUST], row[COL_PROPINSI],
+                         row[COL_KOTA], row[COL_KECAMATAN], row[COL_ALAMAT]),
+                    )
+                    outlet_ids[site] = cur2.lastrowid
+                    stats["outlets"] += 1
+                site_id = outlet_ids[site]
+
+                for c, month_key in zip(COLS_2025 + COLS_2026, MONTH_KEYS):
+                    v = row[c]
+                    if isinstance(v, (int, float)) and v != 0:
+                        fact_batch.append((site_id, sku_id, int(month_key), float(v)))
+
+            con.executemany(
+                "INSERT OR REPLACE INTO fact_krt (site_id, sku_id, month, krt) VALUES (?, ?, ?, ?)",
+                fact_batch,
+            )
+            stats["fact_rows"] += len(fact_batch)
+
+        con.execute("INSERT INTO meta VALUES ('built_at', ?)", (str(time.time()),))
+        con.execute("INSERT INTO meta VALUES ('sku_count', ?)", (str(stats["skus"]),))
+        con.execute("INSERT INTO meta VALUES ('fact_row_count', ?)", (str(stats["fact_rows"]),))
+        con.commit()
+    finally:
+        con.close()
+
+    os.replace(tmp_path, out_path)
+    return stats
+
+
 def build_channel_db(omshar_type: str, sku_plan: dict, out_path: Path) -> dict:
     """Build one channel's SQLite file from a {sku_code: (brand, is_rollup)}
     plan. Writes to a .tmp file and atomically swaps it in -- same pattern as
@@ -324,6 +417,88 @@ def refresh_sku(con: sqlite3.Connection, omshar_type: str, sku_code: str,
     return len(fact_batch)
 
 
+# ── live-wiring helpers (Blueprint §5 step 04) ────────────────────────────────
+# UNTESTED against a real built .db -- no full build has actually finished yet
+# (the parallel build was interrupted mid-run to free up the machine, see
+# session history). Written carefully and defensively (every caller falls back
+# to the existing path on ANY exception), but "written correctly" and "verified
+# against real data" are not the same claim -- do not treat this as proven
+# until it's actually been run against a real .db and diffed against the
+# existing seek_outlet() path (Blueprint §5 step 03, still not done).
+
+def db_path_for(omshar_type: str) -> Path:
+    return OUT_DIR / f"{omshar_type}_FULL.db"
+
+
+def is_available(omshar_type: str) -> bool:
+    """True kalau ada .db yang valid (bukan cuma exists() -- juga cek meta
+    table beneran kebentuk, biar file setengah-jadi/rusak tidak dianggap OK)."""
+    path = db_path_for(omshar_type)
+    if not path.exists():
+        return False
+    try:
+        con = sqlite3.connect(path)
+        try:
+            row = con.execute("SELECT value FROM meta WHERE key='sku_count'").fetchone()
+            return row is not None and int(row[0]) > 0
+        finally:
+            con.close()
+    except Exception:
+        return False
+
+
+def query_outlet_all_brands(db_path: Path, sites: list[str], is_rollup: int = 1) -> dict:
+    """Semua brand rollup, SEMUA bulan, untuk satu ATAU BEBERAPA site (site
+    lebih dari satu = penjumlahan gabungan) -- SATU query gantiin loop N-query
+    per brand yang dipakai seek_outlet() lewat query_brand() sekarang.
+    Return {brand: {month_int: krt}}."""
+    if not sites:
+        return {}
+    con = sqlite3.connect(db_path)
+    try:
+        placeholders = ",".join("?" * len(sites))
+        rows = con.execute(
+            f"""SELECT b.brand, f.month, SUM(f.krt) FROM fact_krt f
+                JOIN dim_sku s ON s.sku_id = f.sku_id
+                JOIN dim_brand b ON b.brand_id = s.brand_id
+                JOIN dim_outlet o ON o.site_id = f.site_id
+                WHERE o.site IN ({placeholders}) AND s.is_rollup = ?
+                GROUP BY b.brand, f.month""",
+            (*sites, is_rollup),
+        ).fetchall()
+        out: dict[str, dict[int, float]] = {}
+        for brand, month, krt in rows:
+            out.setdefault(brand, {})[month] = krt
+        return out
+    finally:
+        con.close()
+
+
+def query_outlet_info(db_path: Path, sites: list[str]) -> dict | None:
+    """Metadata outlet (wilayah/nama/alamat dsb) dari site PERTAMA yang ketemu
+    di dim_outlet -- sama seperti seek_outlet() ambil dari baris pertama yang
+    match. None kalau tidak satu pun site ketemu di cache ini."""
+    if not sites:
+        return None
+    con = sqlite3.connect(db_path)
+    try:
+        placeholders = ",".join("?" * len(sites))
+        row = con.execute(
+            f"""SELECT site, wilayah, outlet, propinsi, kota, kecamatan, alamat
+                FROM dim_outlet WHERE site IN ({placeholders}) LIMIT 1""",
+            sites,
+        ).fetchone()
+        if row is None:
+            return None
+        site, wilayah, outlet, propinsi, kota, kecamatan, alamat = row
+        return {
+            "Site": site, "Wilayah": wilayah, "Outlet": outlet,
+            "Propinsi": propinsi, "Kota": kota, "Kecamatan": kecamatan, "Alamat": alamat,
+        }
+    finally:
+        con.close()
+
+
 # ── query shapes (prototype -- not what omset_seeker.py will call yet) ───────
 
 def query_brand_total(db_path: Path, site: str, brand: str) -> list[tuple]:
@@ -367,6 +542,28 @@ if __name__ == "__main__":
         # baseline measured earlier for the same file (ABIDIN, UMUM, DAPUL+LAPUL).
         elapsed, n = time_pruned_read("UMUM", "ABIDIN", t.DAPUL + t.LAPUL)
         print(f"pruned read: {elapsed:.1f}s, {n} rows")
+
+    elif len(sys.argv) > 1 and sys.argv[1] == "_build_full":
+        # Blueprint §5 step 02 -- real full-scale build, both channels, ALL
+        # SKU_LIST groups included (not just the 7 curated big-brand groups
+        # Detail SKU Brand Besar limits itself to). Real CLI invocation (not
+        # inline `python -c`) ON PURPOSE -- multiprocessing.Pool on Windows
+        # re-imports the launching script as a fresh process, and a `-c`
+        # string has no stable module to re-import, so Pool workers spawned
+        # from an inline script can misbehave. A real .py file (like this
+        # one, like transpose.py) doesn't have that problem.
+        for ch in ["UMUM", "HOREKA"]:
+            list_dir = Path(r"D:\DB OMSHAR\SKU_LIST") / ch
+            groups = [p.stem for p in list_dir.glob("*.txt")]
+            print(f"=== {ch}: building with {len(groups)} extra groups ===")
+            plan = build_sku_plan(ch, groups)
+            print(f"{ch} plan size: {len(plan)} sku codes")
+            t0 = time.time()
+            out_path = OUT_DIR / f"{ch}_FULL.db"
+            stats = build_channel_db_parallel(ch, plan, out_path)
+            wall = time.time() - t0
+            print(f"{ch} DONE: wall={wall:.1f}s  stats={stats}")
+            print()
 
     elif len(sys.argv) > 1 and sys.argv[1] == "_refresh_test":
         # Proves the DELETE-then-INSERT fix: build a sku with a "10 Sep

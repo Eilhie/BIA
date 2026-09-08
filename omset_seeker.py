@@ -9,11 +9,22 @@ Sumber data: omset_pipeline/output/CSV/{UMUM,HOREKA}/OMSHAR {tipe} {brand} TRANS
 import os
 import re
 import shutil
+import sys as _sys
 from functools import lru_cache
 from pathlib import Path
 
 import openpyxl
 import pandas as pd
+
+# SQL cache (Blueprint SQL §5 step 04) -- optional fast path, see seek_outlet_sql()
+# below. Import itself is defensive: if sql_cache.py or its deps ever fail to
+# import for any reason, seek_outlet_sql() just falls back to seek_outlet()
+# every time, same as if the cache .db were simply missing.
+_sys.path.insert(0, str(Path(__file__).resolve().parent / "omset_pipeline"))
+try:
+    import sql_cache as _sql_cache
+except Exception:
+    _sql_cache = None
 
 CSV_DIR = Path(__file__).resolve().parent / "omset_pipeline" / "output" / "CSV"
 CACHE_DIR = CSV_DIR.parent / "CACHE"
@@ -534,6 +545,87 @@ def seek_outlet(site: str, omshar_type: str = "UMUM", brands: list[str] | None =
         outlet_info["Wilayah"] = gabungan["wilayah"]
 
     return table, outlet_info
+
+
+_MONTH_ABBR = ["JAN", "FEB", "MAR", "APR", "MEI", "JUN", "JUL", "AGS", "SEP", "OKT", "NOV", "DES"]
+
+
+def _yyyymm_to_label(yyyymm: int) -> str | None:
+    year, month = divmod(yyyymm, 100)
+    if not (1 <= month <= 12):
+        return None
+    return f"{_MONTH_ABBR[month - 1]} {year}"
+
+
+def seek_outlet_sql(site: str, omshar_type: str = "UMUM", brands: list[str] | None = None):
+    """Jalur cepat lewat SQL cache (Blueprint SQL §5 step 04) -- SATU query per
+    channel gantiin loop N-query (satu per brand) yang dipakai seek_outlet()
+    lewat query_brand(). Signature & return shape PERSIS sama dengan
+    seek_outlet() supaya caller bisa saling gantiin.
+
+    BELUM DIVERIFIKASI terhadap data nyata -- tidak ada build sql_cache.py yang
+    selesai sampai sekarang (dihentikan di tengah jalan supaya tidak makan
+    resource mesin saat sedang dipakai kerja, lihat riwayat sesi). Fallback ke
+    seek_outlet() biasa terjadi otomatis kalau: cache belum ada/tidak lengkap
+    (salah satu channel gabungan lintas-channel tidak tersedia, sengaja TIDAK
+    dicampur sebagian cache/sebagian jalur lama), atau exception APA PUN di
+    jalur ini -- jadi aman dipanggil sebelum Blueprint §5 step 03 (verifikasi
+    lawan seek_outlet() beneran) benar-benar dikerjakan."""
+    if _sql_cache is None:
+        return seek_outlet(site, omshar_type, brands)
+
+    try:
+        brands_wanted = brands or BRAND_ORDER
+        gabungan = load_gabungan_map(omshar_type).get(site)
+        channel_sites = resolve_site_list_by_channel(site, omshar_type)
+
+        totals: dict[str, dict[int, float]] = {}
+        outlet_info = None
+        for channel, sites in channel_sites.items():
+            if not _sql_cache.is_available(channel):
+                return seek_outlet(site, omshar_type, brands)
+            db_path = _sql_cache.db_path_for(channel)
+            brand_months = _sql_cache.query_outlet_all_brands(db_path, sites)
+            for brand, months in brand_months.items():
+                dest = totals.setdefault(brand, {})
+                for m, krt in months.items():
+                    dest[m] = dest.get(m, 0.0) + krt
+            if outlet_info is None:
+                info = _sql_cache.query_outlet_info(db_path, sites)
+                if info is not None:
+                    outlet_info = {
+                        "Wilayah": info["Wilayah"], "Outlet": info["Outlet"],
+                        "Propinsi": info["Propinsi"], "Kota": info["Kota"],
+                        "Kecamatan": info["Kecamatan"], "Alamat": info["Alamat"],
+                        "Site": site,
+                    }
+
+        rows = []
+        for brand in brands_wanted:
+            row = {m: 0.0 for m in MONTH_LABELS}
+            for yyyymm, krt in totals.get(brand, {}).items():
+                label = _yyyymm_to_label(yyyymm)
+                if label in row:
+                    row[label] = krt
+            if brand == KONIG_WEISSBIER_RAW:
+                dunkel_row = {m: 0.0 for m in MONTH_LABELS}
+                for yyyymm, krt in totals.get(KONIG_DUNKEL, {}).items():
+                    label = _yyyymm_to_label(yyyymm)
+                    if label in dunkel_row:
+                        dunkel_row[label] = krt
+                row = {m: row[m] - dunkel_row[m] for m in MONTH_LABELS}
+            row["Brand"] = brand
+            rows.append(row)
+
+        table = pd.DataFrame(rows).set_index("Brand")[MONTH_LABELS]
+
+        if gabungan and outlet_info is not None:
+            outlet_info["Outlet"] = gabungan["name"]
+            outlet_info["Wilayah"] = gabungan["wilayah"]
+
+        return table, outlet_info
+    except Exception:
+        return seek_outlet(site, omshar_type, brands)
 
 
 def build_outlet_index(omshar_type: str) -> pd.DataFrame:
