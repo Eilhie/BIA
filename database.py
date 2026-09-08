@@ -367,16 +367,34 @@ def compute_xp(action_counts: dict[str, int]) -> int:
     return sum(XP_WEIGHTS.get(action, 0) * count for action, count in action_counts.items())
 
 
-def xp_to_level(xp: int) -> tuple[int, int, int]:
-    """(level, xp_ke_level_ini, xp_dibutuhkan_buat_naik) -- level N butuh XP
-    kumulatif >= 50*N*(N+1) (kurva naik: Lv1->2 butuh 100, Lv2->3 butuh 200
-    LAGI, Lv3->4 butuh 300 LAGI, dst -- makin tinggi level makin lama)."""
-    level = 1
-    while 50 * level * (level + 1) <= xp:
-        level += 1
-    prev_threshold = 50 * (level - 1) * level
-    next_threshold = 50 * level * (level + 1)
-    return level, xp - prev_threshold, next_threshold - prev_threshold
+# Nama, bukan angka -- SENGAJA. "Level" di app ini sudah berarti peran akses
+# (0-5, lihat auth.py/config.yaml, "Level 5 = Admin"). Progres gamifikasi
+# butuh istilah SENDIRI supaya dua hal yang beda sama sekali (peran akses
+# vs seberapa aktif seseorang pakai app) tidak pernah kelihatan seperti hal
+# yang sama di halaman yang sama. Ambang batas dipilih lewat data nyata
+# access_log.db (7 user asli, XP 80-13993) supaya sebaran rank-nya benar-benar
+# kepakai, bukan cuma satu rank yang keisi semua orang.
+RANKS = [
+    ("Pemula", 0),
+    ("Terampil", 150),
+    ("Berpengalaman", 500),
+    ("Ahli", 1000),
+    ("Master", 2500),
+    ("Legenda", 5000),
+]
+
+
+def xp_to_rank(xp: int) -> tuple[str, int, int | None]:
+    """(nama_rank, xp_ke_rank_ini, xp_dibutuhkan_ke_rank_berikutnya -- None
+    kalau sudah rank tertinggi, tidak ada plafon lagi)."""
+    idx = 0
+    for i, (_, threshold) in enumerate(RANKS):
+        if xp >= threshold:
+            idx = i
+    name, cur_threshold = RANKS[idx]
+    if idx + 1 < len(RANKS):
+        return name, xp - cur_threshold, RANKS[idx + 1][1] - cur_threshold
+    return name, xp - cur_threshold, None
 
 
 def login_streak_days(username: str) -> int:

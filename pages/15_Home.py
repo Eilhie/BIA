@@ -1,13 +1,19 @@
 """
 HOME
-Landing page baru (menggantikan Omset Seeker sebagai default) -- level 1,
-semua user aktif bisa akses. Fokus: Player Progress (level/XP/streak dari
+Landing page baru (menggantikan Omset Seeker sebagai default) -- level akses
+1, semua user aktif bisa buka. Fokus: Player Progress (rank/XP/streak dari
 access_log yang SUDAH ada, opt-in leaderboard), bukan halaman teknis seperti
-Dashboard (tetap level 5/Admin, tidak berubah).
+Dashboard (tetap level akses 5/Admin, tidak berubah).
+
+PENTING: "rank" gamifikasi di sini SENGAJA bukan "level" -- "level" di app
+ini sudah berarti peran akses (0-5, lihat auth.py/config.yaml, "Level 5 =
+Admin"). Menyebutnya "Level" juga di sini bikin dua konsep yang sama sekali
+beda (peran akses vs keaktifan pakai app) kelihatan seperti hal yang sama,
+di halaman yang sama pula.
 
 XP dihitung dari aksi yang SUDAH tercatat hari ini juga (login, cari_outlet,
 lihat_outlet, buka_halaman) -- tidak ada instrumentasi baru, lihat
-database.py (XP_WEIGHTS, compute_xp, xp_to_level, login_streak_days).
+database.py (XP_WEIGHTS, compute_xp, xp_to_rank, login_streak_days).
 """
 
 import streamlit as st
@@ -23,20 +29,24 @@ st.title(f"Halo, {username}")
 # ── Player Progress ───────────────────────────────────────────────────────
 counts = db.get_user_action_counts(username)
 xp = db.compute_xp(counts)
-level, xp_into, xp_needed = db.xp_to_level(xp)
+rank, xp_into, xp_needed = db.xp_to_rank(xp)
 streak = db.login_streak_days(username)
 
 p1, p2, p3 = st.columns([1, 2, 1])
 with p1:
     st.markdown(
-        f"<div style='font-size:52px; font-weight:700; line-height:1; text-align:center;'>Lv.{level}</div>"
+        f"<div style='font-size:34px; font-weight:700; line-height:1.2; text-align:center;'>{rank}</div>"
         f"<div style='text-align:center; color:gray; font-size:12px;'>{xp} XP total</div>",
         unsafe_allow_html=True,
     )
 with p2:
     st.write("")
-    st.progress(min(xp_into / xp_needed, 1.0) if xp_needed else 1.0)
-    st.caption(f"{xp_into} / {xp_needed} XP menuju Level {level + 1}")
+    if xp_needed is None:
+        st.progress(1.0)
+        st.caption(f"Rank tertinggi -- {xp} XP")
+    else:
+        st.progress(min(xp_into / xp_needed, 1.0))
+        st.caption(f"{xp_into} / {xp_needed} XP menuju rank berikutnya")
 with p3:
     st.metric("Login streak", f"{streak} hari" if streak else "belum mulai")
 
@@ -65,16 +75,16 @@ for uname, uc in all_counts.items():
     if not db.get_leaderboard_opt_in(uname):
         continue
     u_xp = db.compute_xp(uc)
-    u_level, _, _ = db.xp_to_level(u_xp)
-    board_rows.append((uname, u_level, u_xp))
+    u_rank, _, _ = db.xp_to_rank(u_xp)
+    board_rows.append((uname, u_rank, u_xp))
 board_rows.sort(key=lambda r: r[2], reverse=True)
 
 if not board_rows:
     st.info("Belum ada yang mengaktifkan papan peringkat.")
 else:
-    for i, (uname, u_level, u_xp) in enumerate(board_rows, start=1):
+    for i, (uname, u_rank, u_xp) in enumerate(board_rows, start=1):
         highlight = " **(kamu)**" if uname == username else ""
-        st.write(f"{i}. **{uname}**{highlight} — Level {u_level} · {u_xp} XP")
+        st.write(f"{i}. **{uname}**{highlight} — {u_rank} · {u_xp} XP")
 
 st.divider()
 
