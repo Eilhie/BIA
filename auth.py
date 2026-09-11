@@ -371,7 +371,19 @@ def require_level(min_level: int, page: str = ""):
         )
         st.stop()
 
-    if page:
+    if page and st.session_state.get("_last_logged_page") != page:
+        # [FIX] Sebelumnya log_action() dipanggil TIAP KALI require_level()
+        # jalan -- yang berarti tiap rerun Streamlit, bukan cuma tiap kali
+        # user benar-benar PINDAH halaman. Streamlit rerun SELURUH script
+        # (termasuk baris ini di paling atas) pada hampir SEMUA interaksi
+        # widget -- ditemukan nyata: satu user ngetik di kotak cari outlet
+        # (st.text_input polos, tiap huruf = rerun) selama ~6 jam tercatat
+        # 2063 kali "buka_halaman" utk Omset Seeker SAJA, bikin XP-nya jauh
+        # lebih tinggi dari yang seharusnya -- bukan curang, murni bug
+        # logging. Sekarang cuma dicatat sekali per kunjungan NYATA (beda
+        # dari halaman yang terakhir kali dicatat di sesi ini), tetap
+        # tercatat lagi kalau user pindah ke halaman lain lalu balik lagi.
+        st.session_state["_last_logged_page"] = page
         db.log_action(user["username"], "buka_halaman", page)
     _render_user_bar(user)
     return user
