@@ -129,7 +129,13 @@ st.caption(
 
 st.divider()
 
-# ── Opt-in leaderboard ───────────────────────────────────────────────────────
+# ── Leaderboard -- semua user aktif, TIDAK opt-in ────────────────────────────
+# Sebelumnya opt-in (checkbox "Tampilkan saya") -- diubah atas permintaan
+# eksplisit: semua user aktif tampil otomatis, tidak perlu tindakan apa pun.
+# leaderboard_opt_in column & get_leaderboard_opt_in()/set_leaderboard_opt_in()
+# di database.py SENGAJA dibiarkan ada (tidak dipakai lagi di sini) -- murah
+# disimpan, gampang dipasang lagi kalau opt-in mau diaktifkan ulang nanti.
+#
 # Periode DIPISAH dari Level pribadi di atas (yang tetap XP SEMUA WAKTU, kayak
 # level karakter game -- tidak masuk akal reset). Leaderboard "Semua Waktu"
 # saja bikin akun yang paling lama/paling sering dipakai (mis. akun admin)
@@ -137,16 +143,7 @@ st.divider()
 # ada gunanya sebagai kompetisi. Mingguan/bulanan reset di jadwal TETAP
 # (Senin/tanggal 1, lihat leaderboard_period_bounds()), jadi semua orang
 # benar-benar mulai dari nol bareng-bareng tiap periode baru.
-lb_col1, lb_col2 = st.columns([4, 1])
-lb_col1.subheader("Papan Peringkat")
-opted_in = db.get_leaderboard_opt_in(username)
-new_opt_in = lb_col2.checkbox("Tampilkan saya", value=opted_in, key="lb_opt_in")
-if new_opt_in != opted_in:
-    db.set_leaderboard_opt_in(username, new_opt_in)
-    st.rerun()
-
-if not new_opt_in:
-    st.caption("Kamu tidak muncul di papan peringkat sampai dicentang -- bukan sekadar disamarkan, benar-benar tidak ditampilkan.")
+st.subheader("Papan Peringkat")
 
 period_label = st.radio(
     "Periode", ["Minggu Ini", "Bulan Ini", "Semua Waktu"], index=0,
@@ -157,14 +154,17 @@ since = db.leaderboard_period_bounds(period_key)
 
 # Level badge di papan = level SEMUA WAKTU (identitas permanen, sama seperti
 # badge pribadi di atas) -- yang berubah per periode cuma XP yang dipakai
-# buat URUTAN peringkat. Roster diambil dari opted_in_users(), BUKAN dari
-# siapa yang punya baris di periode ini, supaya yang opt-in tapi tidak aktif
-# periode ini tetap tampil (0 XP), tidak diam-diam hilang.
+# buat URUTAN peringkat. Roster = SEMUA user AKTIF (list_users(), bukan
+# opted_in_users() lagi), supaya yang belum pernah pakai app periode ini
+# tetap tampil (0 XP), tidak diam-diam hilang.
 period_counts = db.get_all_users_action_counts(since=since)
 alltime_counts = period_counts if not since else db.get_all_users_action_counts()
 
 board_rows = []
-for uname in db.get_leaderboard_opted_in_users():
+for u in db.list_users():
+    if not u["active"]:
+        continue
+    uname = u["username"]
     period_xp = db.compute_xp(period_counts.get(uname, {}))
     overall_xp = db.compute_xp(alltime_counts.get(uname, {}))
     overall_level, _, _ = db.xp_to_level(overall_xp)
@@ -172,7 +172,7 @@ for uname in db.get_leaderboard_opted_in_users():
 board_rows.sort(key=lambda r: r[2], reverse=True)
 
 if not board_rows:
-    st.info("Belum ada yang mengaktifkan papan peringkat.")
+    st.info("Belum ada user aktif.")
 else:
     st.caption(f"Diurutkan berdasarkan XP {period_label.lower()} -- badge Lv. tetap level semua waktu.")
     rows_html = []
