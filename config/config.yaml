@@ -32,4 +32,5 @@ pages:
   "pages/14_Atur_Gabungan_UMUM.py": 5  # status/isi grup gabungan UMUM (dari file Excel divisi lain)
   "pages/11_EAO_Sync.py": 5           # monitoring server EAO + sync manual
   "pages/12_Cukai_Kompetitor.py": 5   # estimasi volume kompetitor dari data cukai
+  "pages/16_Setup_Daily_Report.py": 5  # salin file root Daily Report ke folder tanggal hari ini
   "pages/13_BPR.py": 4                 # rekap NORM/STOK/DOI/Order harian per Depo & Wilayah

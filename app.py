@@ -20,9 +20,12 @@ set_page_config() HARUS di sini (satu-satunya tempat) -- kalau halaman tujuan
 juga memanggilnya, Streamlit error "can only be called once per app".
 """
 
+from datetime import datetime
+
 import streamlit as st
 
 import auth
+import daily_report_setup as drs
 
 st.set_page_config(page_title="OMSET Seeker", layout="wide")
 
@@ -47,6 +50,7 @@ PAGE_DEFS = [
     ("Sinkronisasi & Data", "pages/14_Atur_Gabungan_UMUM.py", "Gabungan UMUM", False),
     ("Sinkronisasi & Data", "pages/6_Cek_Cutoff_OMSHAR.py", "Cek Cutoff OMSHAR", False),
     ("Sinkronisasi & Data", "pages/12_Cukai_Kompetitor.py", "Cukai Kompetitor", False),
+    ("Sinkronisasi & Data", "pages/16_Setup_Daily_Report.py", "Setup Daily Report", False),
 
     ("Admin", "pages/8_Kelola_User.py", "Kelola User", False),
     ("Admin", "pages/9_Audit_Trail.py", "Audit Trail", False),
@@ -96,6 +100,37 @@ st.sidebar.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+# Modal notifikasi Setup Daily Report -- muncul di halaman APAPUN buat user
+# Admin (level 5), bukan cuma kalau mereka kebetulan buka halaman
+# "Setup Daily Report" sendiri. check_status() baca-saja (aman dipanggil
+# tiap rerun); modal cuma muncul kalau ada file yang beneran belum tersalin
+# hari ini, dan cuma sekali per hari per sesi (dismiss tersimpan per
+# TANGGAL, jadi otomatis muncul lagi besok kalau belum di-setup).
+_today_str = str(datetime.now().date())
+
+
+@st.dialog("Setup Daily Report")
+def _daily_report_modal(status: dict):
+    st.write(f"Folder hari ini: `{status['target']}`")
+    st.warning(f"**{status['missing_count']} dari {status['total']}** file belum tersalin ke folder hari ini.")
+    with st.expander("Lihat file yang belum tersalin"):
+        for name in status["missing_names"]:
+            st.write(f"- {name}")
+    c1, c2 = st.columns(2)
+    if c1.button("Jalankan Sekarang", type="primary"):
+        drs.run_setup()
+        st.session_state["_daily_report_dismissed_date"] = _today_str
+        st.rerun()
+    if c2.button("Nanti Saja"):
+        st.session_state["_daily_report_dismissed_date"] = _today_str
+        st.rerun()
+
+
+if user["level"] >= 5 and st.session_state.get("_daily_report_dismissed_date") != _today_str:
+    _status = drs.check_status()
+    if _status["missing_count"] > 0:
+        _daily_report_modal(_status)
 
 nav = st.navigation(sections)
 nav.run()
