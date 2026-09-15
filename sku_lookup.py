@@ -35,16 +35,47 @@ MONTH_LABELS_ALL = MONTH_LABELS_2025 + MONTH_LABELS_2026
 _EMPTY_TREND = {m: 0 for m in MONTH_LABELS_ALL}
 
 
+def _all_sku_files_on_disk(category: str) -> set[str]:
+    """Nama SKU (tanpa prefix 'OMSHAR {category} ' & akhiran '.xls') dari SEMUA file
+    OMSHAR {category} yang BENAR-BENAR ada di server sekarang -- dipakai buat nambal
+    get_sku_catalog() supaya SKU yang belum dipetakan ke brand mana pun (mis. PROST
+    RAJAWALI reguler, SINGARAJA PALE ALE reguler, BIR-MIX -- ditemukan lewat laporan
+    dropdown Cek Klaim SKU yang tidak lengkap) tetap muncul, bukan hilang diam-diam."""
+    if not OMSHAR_DIR.exists():
+        return set()
+    prefix = f"OMSHAR {category} "
+    return {
+        p.stem[len(prefix):]
+        for p in OMSHAR_DIR.iterdir()
+        if p.is_file() and p.suffix.lower() == ".xls" and p.name.startswith(prefix)
+    }
+
+
 def get_sku_catalog(category: str) -> dict[str, list[str]]:
-    """Brand -> daftar nama file SKU individu, dari mapping brand->file yang sudah
-    diverifikasi lewat pembongkaran formula VLOOKUP asli (UMUM_FILE/HOREKA_FILE di
-    transpose.py) -- bukan dari SKU_LIST (itu cuma daftar buat sync robocopy, tidak
-    selalu 1:1 dengan brand di pipeline, mis. tidak ada entri SPA/PRL terpisah)."""
+    """Brand -> daftar nama file SKU individu. Dasarnya mapping brand->file yang
+    sudah diverifikasi lewat pembongkaran formula VLOOKUP asli (UMUM_FILE/
+    HOREKA_FILE di transpose.py) -- bukan dari SKU_LIST (itu cuma daftar buat sync
+    robocopy, tidak selalu 1:1 dengan brand di pipeline, mis. tidak ada entri
+    SPA/PRL terpisah).
+
+    Mapping itu ternyata TIDAK mencakup semua SKU yang nyata disync di server
+    (PROST RAJAWALI/SINGARAJA PALE ALE reguler & BIR-MIX luput sama sekali --
+    dropdown-nya jadi tidak lengkap). Daripada menebak pengelompokan brand yang
+    "benar" buat SKU yang luput itu (perlu keputusan bisnis, bukan cuma kode),
+    tiap file OMSHAR nyata yang belum ikut brand manapun di atas ditambahkan
+    sendiri sebagai entri brand terpisah (nama brand = nama file apa adanya) --
+    hasilnya SEMUA SKU yang ada pasti muncul & bisa dipilih, dan otomatis tetap
+    lengkap kalau ke depannya ada SKU baru disync sebelum sempat dipetakan ke
+    brand resmi."""
     file_map = UMUM_FILE if category == "UMUM" else HOREKA_FILE
     catalog = {brand: list(files) for brand, files in file_map.items()}
     if category == "HOREKA":
         for brand, files in HOREKA_KEG_FILE.items():
             catalog[f"{brand} (KEG)"] = list(files)
+
+    known_files = {f for files in catalog.values() for f in files}
+    for name in sorted(_all_sku_files_on_disk(category) - known_files):
+        catalog[name] = [name]
     return catalog
 
 
