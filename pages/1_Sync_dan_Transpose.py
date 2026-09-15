@@ -316,6 +316,21 @@ def _list_all_skus(omshar_type: str) -> list[tuple[str, str]]:
     return out
 
 
+def _uncached_sku_codes(omshar_type: str) -> list[tuple[str, str]]:
+    """Subset dari _list_all_skus() yang BELUM punya cache SKU_RAW -- baik karena
+    belum pernah ditranspose custom, maupun tidak termasuk brand rollup resmi
+    manapun (lihat investigasi kenapa dropdown Cek Klaim SKU sebelumnya tidak
+    lengkap -- ratusan SKU_LIST kode ternyata tidak ada di UMUM_FILE/HOREKA_FILE).
+    Dipakai tombol \"Pilih semua yang belum ke-cache\" di bawah supaya admin tidak
+    perlu cari manual satu-satu dari ratusan kode yang ada."""
+    out = []
+    for group, code in _list_all_skus(omshar_type):
+        cache_path = _t.CSV_DIR / omshar_type / "SKU_RAW" / f"{code}.csv"
+        if not cache_path.exists():
+            out.append((group, code))
+    return out
+
+
 def _brands_accounted_for(lines: list[str]) -> int:
     """Hitung brand yang SUDAH kelar diproses (berhasil, di-skip, atau gagal) --
     bukan cuma yang berhasil, biar hitungan X/Y tetap benar walau ada brand yang
@@ -454,6 +469,18 @@ else:
         custom_type = st.radio("Channel", ["UMUM", "HOREKA"], horizontal=True, key="custom_type")
         all_skus = _list_all_skus(custom_type)
         sku_options = [f"{group} / {code}" for group, code in all_skus]
+
+        uncached = _uncached_sku_codes(custom_type)
+        uncached_options = [f"{group} / {code}" for group, code in uncached]
+        st.caption(f"{len(uncached_options)} dari {len(sku_options)} SKU {custom_type} belum ke-cache.")
+        if st.button(
+            f"Pilih semua yang belum ke-cache ({len(uncached_options)})",
+            disabled=not uncached_options,
+            key=f"select_uncached_{custom_type}",
+        ):
+            st.session_state["custom_skus"] = uncached_options
+            st.rerun()
+
         picked = st.multiselect("Pilih SKU", sku_options, key="custom_skus")
         picked_codes = [p.split(" / ", 1)[1] for p in picked]
 

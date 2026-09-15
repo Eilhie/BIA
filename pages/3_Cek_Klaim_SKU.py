@@ -39,6 +39,17 @@ def _to_excel_bytes(df: pd.DataFrame) -> bytes:
     return buf.getvalue()
 
 
+def _style_zero_total(df: pd.DataFrame):
+    """Tandai baris Total=0 (klaim tanpa pergerakan sama sekali) -- ini justru
+    kasus yang paling penting buat tool verifikasi klaim, tapi sebelumnya tidak
+    beda tampilannya dari baris lain di tabel, jadi gampang lewat kalau baris-nya
+    banyak."""
+    def _row_style(row):
+        flag = "background-color: rgba(220, 50, 47, 0.18)" if row["Total"] == 0 else ""
+        return [flag] * len(row)
+    return df.style.apply(_row_style, axis=1)
+
+
 tab_manual, tab_batch = st.tabs(["Cari Manual", "Cek Batch"])
 
 # ── TAB 1: CARI MANUAL ─────────────────────────────────────────────────────────
@@ -92,7 +103,10 @@ with tab_manual:
             result_df = pd.DataFrame(rows)
 
         st.subheader(f"{sku_name} ({brand}) -- trend {MONTHS[0]} s/d {MONTHS[-1]}")
-        st.dataframe(result_df, use_container_width=True, hide_index=True)
+        n_zero = int((result_df["Total"] == 0).sum())
+        if n_zero:
+            st.caption(f"{n_zero} dari {len(result_df)} outlet nol pergerakan sepanjang periode (ditandai merah).")
+        st.dataframe(_style_zero_total(result_df), use_container_width=True, hide_index=True)
         st.download_button(
             "Download Excel",
             data=_to_excel_bytes(result_df),
@@ -150,8 +164,16 @@ with tab_batch:
                         + ", ".join(unknown)
                     )
 
+                outlets_idx = get_outlet_index(batch_category).set_index("Site")
+                unknown_sites = sorted(set(batch_in["Site"]) - set(outlets_idx.index))
+                if unknown_sites:
+                    st.warning(
+                        f"{len(unknown_sites)} kode site tidak dikenali (kemungkinan salah ketik -- "
+                        "hasilnya 0, JANGAN dibaca sebagai bukti klaim tidak valid): "
+                        + ", ".join(unknown_sites)
+                    )
+
                 with st.spinner(f"Menghitung {len(batch_in)} baris..."):
-                    outlets_idx = get_outlet_index(batch_category).set_index("Site")
                     rows = []
                     for _, r in batch_in.iterrows():
                         site, sku = r["Site"], r["SKU"]
@@ -164,7 +186,10 @@ with tab_batch:
                         rows.append(row)
                     result_df = pd.DataFrame(rows)
 
-                st.dataframe(result_df, use_container_width=True, hide_index=True)
+                n_zero = int((result_df["Total"] == 0).sum())
+                if n_zero:
+                    st.caption(f"{n_zero} dari {len(result_df)} baris nol pergerakan sepanjang periode (ditandai merah).")
+                st.dataframe(_style_zero_total(result_df), use_container_width=True, hide_index=True)
                 st.download_button(
                     "Download hasil (Excel)",
                     data=_to_excel_bytes(result_df),
