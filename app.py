@@ -103,10 +103,11 @@ st.sidebar.markdown(
 
 # Modal notifikasi Setup Daily Report -- muncul di halaman APAPUN buat user
 # Admin (level 5), bukan cuma kalau mereka kebetulan buka halaman
-# "Setup Daily Report" sendiri. check_status() baca-saja (aman dipanggil
-# tiap rerun); modal cuma muncul kalau ada file yang beneran belum tersalin
-# hari ini, dan cuma sekali per hari per sesi (dismiss tersimpan per
-# TANGGAL, jadi otomatis muncul lagi besok kalau belum di-setup).
+# "Setup Daily Report" sendiri. check_status() baca folder (scan disk) --
+# supaya TIDAK jalan tiap rerun (Streamlit rerun script penuh tiap interaksi
+# widget apa pun), hasilnya di-cache di session_state per TANGGAL, jadi scan
+# beneran cuma terjadi sekali sehari per sesi. Modal sendiri juga cuma
+# muncul sekali per hari (dismiss tersimpan per tanggal juga).
 _today_str = str(datetime.now().date())
 
 
@@ -127,9 +128,12 @@ def _daily_report_modal(status: dict):
         st.rerun()
 
 
-if user["level"] >= 5 and st.session_state.get("_daily_report_dismissed_date") != _today_str:
-    _status = drs.check_status()
-    if _status["missing_count"] > 0:
+if user["level"] >= 5:
+    if st.session_state.get("_daily_report_checked_date") != _today_str:
+        st.session_state["_daily_report_checked_date"] = _today_str
+        st.session_state["_daily_report_status"] = drs.check_status()
+    _status = st.session_state["_daily_report_status"]
+    if _status["missing_count"] > 0 and st.session_state.get("_daily_report_dismissed_date") != _today_str:
         _daily_report_modal(_status)
 
 nav = st.navigation(sections)
