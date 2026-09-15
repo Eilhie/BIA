@@ -12,6 +12,7 @@ from pathlib import Path
 import streamlit as st
 
 import auth
+import paths
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "omset_pipeline"))
 import transpose as t  # noqa: E402
@@ -26,9 +27,9 @@ from omset_seeker import (  # noqa: E402
 auth.require_level(5, page="Dashboard")
 st.title("Dashboard")
 
-DB_DIR = Path(r"D:\DB OMSHAR\DB")
+DB_DIR = paths.OMSHAR_DB_DIR
 TRANSPOSED_DIR = Path(__file__).resolve().parent.parent / "omset_pipeline" / "output" / "DB TRANSPOSED"
-SKU_LIST_DIR = Path(r"D:\DB OMSHAR\SKU_LIST")
+SKU_LIST_DIR = paths.SKU_LIST_DIR
 
 
 def newest_mtime(paths) -> datetime | None:

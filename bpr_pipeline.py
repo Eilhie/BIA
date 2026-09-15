@@ -32,6 +32,8 @@ import pandas as pd
 import py7zr
 import xlrd
 
+import paths
+
 RAW_SHEET = "BPR DETAIL"
 
 # Sumber ASLI: Google Drive (G:) -- terbukti nyata file .7z masuk otomatis
@@ -40,8 +42,8 @@ RAW_SHEET = "BPR DETAIL"
 # salinan yang diekstrak MANUAL oleh seseorang dari sini -- kadang skip
 # weekend, kadang telat -- jadi G: dipakai duluan, D: cuma fallback kalau G:
 # (Google Drive Desktop) sedang tidak ke-mount di komputer yang jalanin app.
-GDRIVE_BPR_DIR = Path(r"G:\My Drive\BPR BIA")
-DAILY_REPORT_DIR = Path(r"D:\Data BIA\2026\Daily Report")
+GDRIVE_BPR_DIR = paths.GDRIVE_BPR_DIR
+DAILY_REPORT_DIR = paths.DAILY_REPORT_DIR
 KIRIM_DIR = DAILY_REPORT_DIR / "Kirim"
 
 _ARCHIVE_NAME_RE = re.compile(r"^BPR_BIA-(\d{14})\.7z$")

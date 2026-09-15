@@ -30,9 +30,10 @@ import openpyxl
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import omset_seeker as os_
+import paths
 
 OUTPUT_DIR = Path(__file__).resolve().parent / "output" / "GABUNGAN_LIVE"
-BIR_XLS_ABS = Path(r"D:\DB OMSHAR\DB\OMSHAR UMUM BIR.xls")
+BIR_XLS_ABS = paths.OMSHAR_DB_DIR / "OMSHAR UMUM BIR.xls"
 # Target relationship path -- URL-encoded absolute path style, persis format
 # yang dipakai file "Formula Live" asli (lihat externalLink1.xml.rels-nya).
 BIR_EXTERNAL_TARGET = "/DB%20OMSHAR/DB/OMSHAR%20UMUM%20BIR.xls"

@@ -13,6 +13,7 @@ from pathlib import Path
 import streamlit as st
 
 import auth
+import paths
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "omset_pipeline"))
 import transpose as t  # noqa: E402
@@ -35,8 +36,8 @@ if btn_col.button("Refresh data"):
     build_sku_data.clear()
     st.rerun()
 
-SKU_LIST_DIR = Path(r"D:\DB OMSHAR\SKU_LIST")
-DEST_DB = Path(r"D:\DB OMSHAR\DB")
+SKU_LIST_DIR = paths.SKU_LIST_DIR
+DEST_DB = paths.OMSHAR_DB_DIR
 
 C_OK = "#4b7a5b"
 C_OK_BG = "#e4efe6"

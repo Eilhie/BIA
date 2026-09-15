@@ -28,6 +28,8 @@ from pathlib import Path
 import openpyxl
 import pandas as pd
 
+import paths
+
 ARCHIVE_DIR = Path(__file__).resolve().parent / "mclub_pipeline"
 ARCHIVE_PATH = {"UMUM": ARCHIVE_DIR / "archive_umum.csv", "HOREKA": ARCHIVE_DIR / "archive_horeka.csv"}
 _LAST_PROCESSED_PATH = {
@@ -36,8 +38,8 @@ _LAST_PROCESSED_PATH = {
 }
 
 WORKING_FILE = {
-    "UMUM": Path(r"D:\OUTLET MCLUB PLATINUM GOLD\List Outlet G P Mc Umum.xlsx"),
-    "HOREKA": Path(r"D:\OUTLET MCLUB PLATINUM GOLD\List Outlet G P Mc Horeka.xlsx"),
+    "UMUM": paths.MCLUB_DIR / "List Outlet G P Mc Umum.xlsx",
+    "HOREKA": paths.MCLUB_DIR / "List Outlet G P Mc Horeka.xlsx",
 }
 
 # Folder tempat divisi lain naruh file RAW terbaru -- dicek langsung tiap
@@ -47,7 +49,7 @@ WORKING_FILE = {
 # belum" pakai waktu modifikasi file (bukan isi) -- folder ini sifatnya
 # drop-only dari divisi lain, bukan folder kerja bersama yang sering dibuka-
 # tutup orang, jadi risiko mtime palsu (seperti kasus Toko Gabungan) kecil.
-RAW_DIR = Path(r"D:\OUTLET MCLUB PLATINUM GOLD\RAW")
+RAW_DIR = paths.MCLUB_DIR / "RAW"
 
 
 def find_latest_raw(category: str) -> Path | None:
@@ -190,14 +192,25 @@ def sync_current_month_from_omshar(category: str) -> dict:
     if archive.empty or "Site" not in archive.columns:
         return {"pulled": False, "month": month_key}
 
-    # Site "Gabungan" (mis. "...GABUNGAN" -- kode sintetis, tidak pernah ada di
+    # Site "Gabungan" (mis. "...GABUNGAN" -- kode sintetis, biasanya tidak ada di
     # data OMSHAR mentah sama sekali, lihat omset_seeker.load_gabungan_map())
     # TIDAK ketangkap oleh lookup langsung di atas -- harus di-resolve satu-satu
     # lewat get_brand_months() (otomatis jumlah dari semua toko anak, termasuk
     # pengecualian lintas-channel HOREKA). Jumlahnya kecil (puluhan-ratusan grup),
     # jadi aman dilakukan satu-satu, bukan bottleneck.
+    # [FIX] Ternyata BUKAN selalu benar "tidak pernah ada di data mentah" --
+    # ditemukan nyata 1 kode (mis. "2224-23023379") yang SEKALIGUS kode outlet
+    # individual asli di BIR (sudah kena lookup langsung di atas) DAN terdaftar
+    # sebagai key gabungan. Tanpa exclude ini, kode itu ke-pull DUA KALI (dobel
+    # baris Site sama di `pulled`) -> crash "cannot reindex on an axis with
+    # duplicate labels" di merge_into_archive(). Lookup langsung (nilai OMSHAR
+    # asli) diprioritaskan, bukan resolusi gabungan yang balik 0 untuk kasus ini.
     gabungan_sites = set(os_.load_gabungan_map(category).keys())
-    archive_gabungan = [s for s in archive["Site"].astype(str) if s in gabungan_sites]
+    already_pulled = set(pulled["Site"])
+    archive_gabungan = [
+        s for s in archive["Site"].astype(str)
+        if s in gabungan_sites and s not in already_pulled
+    ]
     if archive_gabungan:
         gab_rows = [
             {"Site": s, month_key: os_.get_brand_months("BIR", s, category).get(omshar_label, 0)}

@@ -13,6 +13,7 @@ import pandas as pd
 import streamlit as st
 
 import auth
+import paths
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "omset_pipeline"))
 import transpose as t  # noqa: E402
@@ -25,7 +26,7 @@ st.caption(
     "dijalankan, untuk tahu brand mana yang perlu di-Sync ulang."
 )
 
-OMSHAR_DIR = Path(r"D:\DB OMSHAR\DB")
+OMSHAR_DIR = paths.OMSHAR_DB_DIR
 
 
 def _list_entries(category: str, file_map: dict, label_suffix: str = "") -> list:

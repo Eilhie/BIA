@@ -23,14 +23,15 @@ import streamlit as st
 
 import auth
 import omset_seeker
+import paths
 import sku_lookup
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "omset_pipeline"))
 import transpose as _t  # noqa: E402 -- cuma buat jumlah brand per mode (progress bar)
 
 SRC_SERVER = r"\\10.4.1.25\Bev\OMSHAR"
-DEST_DB = r"D:\DB OMSHAR\DB"
-SKU_LIST_DIR = Path(r"D:\DB OMSHAR\SKU_LIST")
+DEST_DB = str(paths.OMSHAR_DB_DIR)
+SKU_LIST_DIR = paths.SKU_LIST_DIR
 TRANSPOSE_DIR = Path(__file__).resolve().parent.parent / "omset_pipeline"
 
 # Total brand yang akan diproses per mode -- dipakai buat progress bar "X/Y brand".

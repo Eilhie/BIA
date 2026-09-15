@@ -277,6 +277,17 @@ pakai sebelum SKU-nya benar-benar disync -- `process_brand()` otomatis
   - `OMSHAR_DIR` — sumber XLS (default: `D:\SDAAREA\DB`, di web app di-set ke `D:\DB OMSHAR\DB` lewat `pages/1_Sync_dan_Transpose.py`)
   - `TRANSPOSE_OUT` — output XLSX (default: `omset_pipeline\output\DB TRANSPOSED`)
   - `TRANSPOSE_CSV` — output CSV (default: `omset_pipeline\output\CSV`)
+- **`paths.py`** — satu sumber kebenaran untuk semua path data eksternal (di luar
+  `D:\SDAAREA`, sebelumnya di-hardcode berulang di banyak file). Semua override-able
+  via env var (default-nya path yang sudah dipakai di PC ini, jadi clone ke laptop
+  lain tinggal set env var yang beda, tanpa ubah kode):
+  - `SDA_OMSHAR_DB_DIR` (default `D:\DB OMSHAR\DB`), `SDA_SKU_LIST_DIR` (default `D:\DB OMSHAR\SKU_LIST`)
+  - `SDA_DAILY_REPORT_DIR` (default `D:\Data BIA\2026\Daily Report`), `SDA_GDRIVE_BPR_DIR` (default `G:\My Drive\BPR BIA`)
+  - `SDA_CUKAI_DIR`, `SDA_EAO_DIR`, `SDA_MCLUB_DIR`, `SDA_TOKO_GABUNGAN_DIR`
+  - Path jaringan (`\\10.4.1.25\...`) sengaja TIDAK di sini -- itu alamat server
+    yang sama dari komputer mana pun, bukan struktur drive lokal per PC.
+  - `omset_pipeline/sql_cache.py` (prototipe, belum dipakai halaman manapun)
+    sengaja belum ikut di-refactor -- lihat komentar "THIS FILE IS A PROTOTYPE" di file itu.
 - **Toko Gabungan** (kode outlet gabungan, lihat halaman Gabungan UMUM/HOREKA):
   dibaca dari file Excel eksternal di `D:\Data BIA\INFO BIA\Toko Gabungan\`,
   murni read-only -- editing dilakukan di file itu sendiri, bukan lewat app ini.

@@ -20,7 +20,9 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-ROOT_DIR = Path(r"D:\Data BIA\2026\Daily Report")
+import paths
+
+ROOT_DIR = paths.DAILY_REPORT_DIR
 KIRIM_DIR = ROOT_DIR / "Kirim"
 
 # Singkatan bulan Inggris 3-huruf -- SAMA PERSIS dengan yang sudah dipakai

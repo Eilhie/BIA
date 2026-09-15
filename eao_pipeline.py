@@ -16,8 +16,10 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
+import paths
+
 SERVER_BASE = Path(r"\\10.4.1.25\Bev\EAO")
-LOCAL_DIR = Path(r"D:\EAO")
+LOCAL_DIR = paths.EAO_DIR
 SYNC_LOG_PATH = LOCAL_DIR / "sync_log.txt"
 
 # Sama persis dengan KEY_DAILY/KEY_MONTHLY di sync_eao.bat -- file INI yang

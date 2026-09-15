@@ -23,6 +23,7 @@ import pandas as pd
 import streamlit as st
 
 import auth
+import paths
 import omset_seeker as os_
 import sku_lookup as sl
 from render_outlet_image import build_html_table, build_row_cells
@@ -48,7 +49,7 @@ BRAND_GROUPS = {
     "SOMAEK": "BAE SOMAEK",
 }
 
-SKU_LIST_DIR = Path(r"D:\DB OMSHAR\SKU_LIST")
+SKU_LIST_DIR = paths.SKU_LIST_DIR
 
 
 def _load_group_skus(category: str, group_file: str) -> list[str]:

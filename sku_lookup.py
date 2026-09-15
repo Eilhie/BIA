@@ -17,6 +17,7 @@ from pathlib import Path
 import pandas as pd
 import xlrd
 
+import paths
 from omset_pipeline.transpose import (
     DAPUL, LAPUL, HOREKA, HEADER_ROWS, COL_SITE, CSV_DIR,
     UMUM_FILE, HOREKA_FILE, HOREKA_KEG_FILE, stack_sheets,
@@ -26,7 +27,7 @@ from omset_seeker import resolve_site_list
 
 # Sumber data sinkron dari server -- lihat feedback_data_source_location:
 # D:\SDAAREA\DB (default nominal transpose.py) kosong, data asli ada di sini.
-OMSHAR_DIR = Path(r"D:\DB OMSHAR\DB")
+OMSHAR_DIR = paths.OMSHAR_DB_DIR
 
 WILAYAH_ORDER = {"UMUM": DAPUL + LAPUL, "HOREKA": HOREKA}
 

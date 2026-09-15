@@ -16,12 +16,13 @@ kemungkinan multi-blok), disengaja skip dulu.
 
 import datetime
 import re
-from pathlib import Path
 
 import openpyxl
 import pandas as pd
 
-CUKAI_DIR = Path(r"D:\cukai kompetitor")
+import paths
+
+CUKAI_DIR = paths.CUKAI_DIR
 REKAP_FILE = CUKAI_DIR / "Cukai Kompetitor.xlsx"
 REKAP_SHEET = "REKAP RAPIH"
 

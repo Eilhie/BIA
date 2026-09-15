@@ -16,6 +16,8 @@ from pathlib import Path
 import openpyxl
 import pandas as pd
 
+import paths
+
 # SQL cache (Blueprint SQL §5 step 04) -- optional fast path, see seek_outlet_sql()
 # below. Import itself is defensive: if sql_cache.py or its deps ever fail to
 # import for any reason, seek_outlet_sql() just falls back to seek_outlet()
@@ -28,7 +30,7 @@ except Exception:
 
 CSV_DIR = Path(__file__).resolve().parent / "omset_pipeline" / "output" / "CSV"
 CACHE_DIR = CSV_DIR.parent / "CACHE"
-TOKO_GABUNGAN_DIR = Path(r"D:\Data BIA\INFO BIA\Toko Gabungan")
+TOKO_GABUNGAN_DIR = paths.TOKO_GABUNGAN_DIR
 
 # UMUM: grup gabungan sumbernya file Excel bulanan dari divisi lain, satu file
 # berisi banyak grup (lihat find_latest_toko_gabungan()). HOREKA tidak punya
