@@ -189,6 +189,21 @@ HOREKA_KEG_FILE = {
     "PROST RAJAWALI PET 20L": ["RPPET20L"],
 }
 
+# Brand turunan: SATU total gabungan SEMUA 15 SKU KEG + PET di atas (bukan
+# rollup resmi terpisah lagi per produk/ukuran) -- diminta user supaya ada
+# satu angka KRT gabungan semua keg/draft+PET HOREKA apa pun jenisnya. File
+# list-nya DITURUNKAN OTOMATIS dari HOREKA_KEG_FILE (bukan didaftar ulang
+# manual) supaya kalau ada SKU KEG/PET baru ditambahkan di atas, TOTAL KEG
+# ikut otomatis tanpa perlu diubah 2 tempat -- dihitung SEBELUM baris ini
+# menambahkan key "TOTAL KEG" sendiri ke HOREKA_KEG_FILE, supaya tidak
+# include dirinya sendiri.
+# process_brand() sudah otomatis SKIP (bukan gagal) file yang belum ada di
+# server (lihat catatan KEG10/PET20L di atas) -- jadi kalau sebagian SKU
+# (mis. KEG 10L / PET) belum disync, TOTAL KEG tetap jalan pakai SKU yang
+# sudah ada saja, sesuai permintaan user (tidak perlu tunggu semua lengkap).
+HOREKA_KEG_FILE["TOTAL KEG"] = [f for files in HOREKA_KEG_FILE.values() for f in files]
+HOREKA_KEG_BRAND_ORDER = HOREKA_KEG_BRAND_ORDER + ["TOTAL KEG"]
+
 
 # ── CORE TRANSPOSE ────────────────────────────────────────────────────────────
 
