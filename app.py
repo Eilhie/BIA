@@ -36,7 +36,7 @@ user = auth.get_current_user()
 PAGE_DEFS = [
     ("Utama", "pages/15_Home.py", "Home", True),
     ("Utama", "omset_search_app.py", "Omset Seeker", False),
-    ("Utama", "pages/5_Outlet_Lapisan_MClub.py", "Outlet Lapisan MClub", False),
+    ("Utama", "mclub/5_Outlet_Lapisan_MClub.py", "Outlet Lapisan MClub", False),
     ("Utama", "pages/3_Cek_Klaim_SKU.py", "Cek Klaim SKU", False),
     ("Utama", "pages/7_Detail_SKU_Brand_Besar.py", "Detail SKU Brand Besar", False),
     ("Utama", "pages/0_Dashboard.py", "Dashboard", False),

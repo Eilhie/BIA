@@ -11,7 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from core import auth
-import mclub_pipeline as mp
+from mclub import mclub_pipeline as mp
 from core.render_outlet_image import build_html_table, build_report_rows
 
 current_user = auth.require_level(4, page="Outlet Lapisan (MClub)")

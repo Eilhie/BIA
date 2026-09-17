@@ -18,7 +18,7 @@ levels:
 pages:
   "pages/15_Home.py": 1              # Home -- landing page baru (Player Progress)
   "omset_search_app.py": 1          # Omset Seeker
-  "pages/5_Outlet_Lapisan_MClub.py": 4
+  "mclub/5_Outlet_Lapisan_MClub.py": 4
   "pages/0_Dashboard.py": 5
   "pages/2_SKU_Manifest.py": 5
   "pages/3_Cek_Klaim_SKU.py": 5
