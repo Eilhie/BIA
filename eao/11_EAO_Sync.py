@@ -14,7 +14,7 @@ import pandas as pd
 import streamlit as st
 
 from core import auth
-import eao_pipeline as ep
+from eao import eao_pipeline as ep
 
 auth.require_level(5, page="EAO Sync")
 st.title("EAO Sync")

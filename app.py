@@ -44,7 +44,7 @@ PAGE_DEFS = [
     ("Utama", "bpr/13_BPR.py", "BPR", False),
 
     ("Sinkronisasi & Data", "pages/1_Sync_dan_Transpose.py", "Sync dan Transpose", False),
-    ("Sinkronisasi & Data", "pages/11_EAO_Sync.py", "EAO Sync", False),
+    ("Sinkronisasi & Data", "eao/11_EAO_Sync.py", "EAO Sync", False),
     ("Sinkronisasi & Data", "pages/4_Atur_SKU_Sync.py", "Atur SKU Sync", False),
     ("Sinkronisasi & Data", "pages/10_Atur_Gabungan_HOREKA.py", "Gabungan HOREKA", False),
     ("Sinkronisasi & Data", "pages/14_Atur_Gabungan_UMUM.py", "Gabungan UMUM", False),
