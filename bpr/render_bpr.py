@@ -41,7 +41,7 @@ except Exception as e:  # pragma: no cover
     MATPLOTLIB_AVAILABLE = False
     _MATPLOTLIB_IMPORT_ERROR = e
 
-import bpr_pipeline as bp
+from bpr import bpr_pipeline as bp
 
 C_DATA = "FFFF00"
 C_BRAND_1 = "00FF00"

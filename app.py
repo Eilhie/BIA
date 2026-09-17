@@ -41,7 +41,7 @@ PAGE_DEFS = [
     ("Utama", "pages/7_Detail_SKU_Brand_Besar.py", "Detail SKU Brand Besar", False),
     ("Utama", "pages/0_Dashboard.py", "Dashboard", False),
     ("Utama", "pages/2_SKU_Manifest.py", "SKU Manifest", False),
-    ("Utama", "pages/13_BPR.py", "BPR", False),
+    ("Utama", "bpr/13_BPR.py", "BPR", False),
 
     ("Sinkronisasi & Data", "pages/1_Sync_dan_Transpose.py", "Sync dan Transpose", False),
     ("Sinkronisasi & Data", "pages/11_EAO_Sync.py", "EAO Sync", False),

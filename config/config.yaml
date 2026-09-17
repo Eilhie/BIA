@@ -33,4 +33,4 @@ pages:
   "pages/11_EAO_Sync.py": 5           # monitoring server EAO + sync manual
   "cukai/12_Cukai_Kompetitor.py": 5   # estimasi volume kompetitor dari data cukai
   "daily_report/16_Setup_Daily_Report.py": 5  # salin file root Daily Report ke folder tanggal hari ini
-  "pages/13_BPR.py": 4                 # rekap NORM/STOK/DOI/Order harian per Depo & Wilayah
+  "bpr/13_BPR.py": 4                 # rekap NORM/STOK/DOI/Order harian per Depo & Wilayah

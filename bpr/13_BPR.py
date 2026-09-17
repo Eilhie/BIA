@@ -38,8 +38,8 @@ import pandas as pd
 import streamlit as st
 
 from core import auth
-import bpr_pipeline as bp
-import render_bpr as rb
+from bpr import bpr_pipeline as bp
+from bpr import render_bpr as rb
 
 
 @st.cache_data(show_spinner=False, ttl="10m")
