@@ -198,4 +198,4 @@ q1, q2 = st.columns(2)
 with q1:
     st.page_link("omset_search_app.py", label="Cari Outlet (Omset Seeker)", icon="🔍")
 with q2:
-    st.page_link("pages/3_Cek_Klaim_SKU.py", label="Cek Klaim SKU", icon="📋")
+    st.page_link("sku/3_Cek_Klaim_SKU.py", label="Cek Klaim SKU", icon="📋")
