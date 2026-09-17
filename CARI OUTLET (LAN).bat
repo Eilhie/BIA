@@ -1,6 +1,6 @@
 @echo off
 title CARI OUTLET - OMSET Seeker (LAN)
-cd /d "D:\SDAAREA"
+cd /d "D:\SDAAREA\omset-app"
 
 echo Mencari alamat IP lokal PC ini...
 for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /i "IPv4"') do set LOCAL_IP=%%a
