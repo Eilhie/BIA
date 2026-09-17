@@ -152,6 +152,23 @@ HOREKA_FILE = {
     "DIV AB1": ["DIV-AB1"],
 }
 
+# Brand blend custom yang diminta user langsung -- gabungan brand RESMI yang
+# sudah ada file-nya sendiri (bukan SKU baru). File list diturunkan otomatis
+# dari UMUM_FILE/HOREKA_FILE brand sumbernya (bukan didaftar ulang manual)
+# supaya tetap sinkron kalau daftar file brand sumbernya berubah nanti.
+# SENGAJA TIDAK dimasukkan ke BRAND_ORDER -- tidak otomatis muncul di laporan
+# Omset Seeker/report outlet manapun, murni file transpose berdiri sendiri
+# sampai diminta sebaliknya.
+#   - BIR PROST  = PROST LAGER ("Classic") + PROST PILSENER + PRL LAGER ("Rajawali")
+#   - BIR MIX    = PROST ALSTER + SIDU ("Sirakjedu")
+EXTRA_BLEND_BRAND_ORDER = ["BIR PROST", "BIR MIX"]
+
+UMUM_FILE["BIR PROST"] = UMUM_FILE["PROST LAGER"] + UMUM_FILE["PROST PILSENER"] + UMUM_FILE["PRL LAGER"]
+HOREKA_FILE["BIR PROST"] = HOREKA_FILE["PROST LAGER"] + HOREKA_FILE["PROST PILSENER"] + HOREKA_FILE["PRL LAGER"]
+
+UMUM_FILE["BIR MIX"] = UMUM_FILE["PROST ALSTER"] + UMUM_FILE["SIDU"]
+HOREKA_FILE["BIR MIX"] = HOREKA_FILE["PROST ALSTER"] + HOREKA_FILE["SIDU"]
+
 # Varian "WITH KEG" -- HOREKA-only, dipakai outlet yang jual bir keg/draft
 # (lihat sheet "WITH KEG" di D:\Random\OMSET OUTLET\OMSET HOREKA 2026.xlsx).
 # NOTE: formula asli di file itu menambahkan file KLW640DK (Konig Dunkel) ke
