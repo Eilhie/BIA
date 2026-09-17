@@ -13,7 +13,7 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-import auth
+from core import auth
 import eao_pipeline as ep
 
 auth.require_level(5, page="EAO Sync")

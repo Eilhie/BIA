@@ -29,8 +29,8 @@ from pathlib import Path
 import openpyxl
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import omset_seeker as os_
-import paths
+from core import omset_seeker as os_
+from core import paths
 
 OUTPUT_DIR = Path(__file__).resolve().parent / "output" / "GABUNGAN_LIVE"
 BIR_XLS_ABS = paths.OMSHAR_DB_DIR / "OMSHAR UMUM BIR.xls"

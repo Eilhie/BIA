@@ -15,8 +15,8 @@ from pathlib import Path
 
 import streamlit as st
 
-import auth
-import paths
+from core import auth
+from core import paths
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "omset_pipeline"))
 import transpose as t  # noqa: E402

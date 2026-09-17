@@ -21,9 +21,9 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-import auth
-import omset_seeker
-import paths
+from core import auth
+from core import omset_seeker
+from core import paths
 import sku_lookup
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "omset_pipeline"))

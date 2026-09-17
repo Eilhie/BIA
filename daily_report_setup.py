@@ -20,7 +20,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-import paths
+from core import paths
 
 ROOT_DIR = paths.DAILY_REPORT_DIR
 KIRIM_DIR = ROOT_DIR / "Kirim"

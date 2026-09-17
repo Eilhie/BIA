@@ -37,7 +37,7 @@ tidak direplikasi di sini.
 import pandas as pd
 import streamlit as st
 
-import auth
+from core import auth
 import bpr_pipeline as bp
 import render_bpr as rb
 

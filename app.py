@@ -24,7 +24,7 @@ from datetime import datetime
 
 import streamlit as st
 
-import auth
+from core import auth
 import daily_report_setup as drs
 
 st.set_page_config(page_title="OMSET Seeker", layout="wide")

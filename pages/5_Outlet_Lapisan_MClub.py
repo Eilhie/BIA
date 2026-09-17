@@ -10,9 +10,9 @@ import io
 import pandas as pd
 import streamlit as st
 
-import auth
+from core import auth
 import mclub_pipeline as mp
-from render_outlet_image import build_html_table, build_report_rows
+from core.render_outlet_image import build_html_table, build_report_rows
 
 current_user = auth.require_level(4, page="Outlet Lapisan (MClub)")
 is_admin = current_user["level"] >= 5

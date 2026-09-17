@@ -9,7 +9,7 @@ menimpa/menghapus file yang sudah tersalin.
 
 import streamlit as st
 
-import auth
+from core import auth
 import daily_report_setup as drs
 
 auth.require_level(5, page="Setup Daily Report")

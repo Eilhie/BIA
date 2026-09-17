@@ -20,7 +20,7 @@ import re
 import openpyxl
 import pandas as pd
 
-import paths
+from core import paths
 
 CUKAI_DIR = paths.CUKAI_DIR
 REKAP_FILE = CUKAI_DIR / "Cukai Kompetitor.xlsx"

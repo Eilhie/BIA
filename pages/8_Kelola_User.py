@@ -8,8 +8,8 @@ sekarang ada di halaman terpisah, lihat pages/9_Audit_Trail.py.
 import pandas as pd
 import streamlit as st
 
-import auth
-import database as db
+from core import auth
+from core import database as db
 
 current = auth.require_level(5, page="Kelola User")
 st.title("Kelola User")

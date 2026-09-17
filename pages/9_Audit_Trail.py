@@ -11,8 +11,8 @@ from datetime import datetime, time as dtime
 import pandas as pd
 import streamlit as st
 
-import auth
-import database as db
+from core import auth
+from core import database as db
 
 auth.require_level(5, page="Audit Trail")
 st.title("Audit Trail")

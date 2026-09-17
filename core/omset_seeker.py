@@ -16,19 +16,19 @@ from pathlib import Path
 import openpyxl
 import pandas as pd
 
-import paths
+from core import paths
 
 # SQL cache (Blueprint SQL §5 step 04) -- optional fast path, see seek_outlet_sql()
 # below. Import itself is defensive: if sql_cache.py or its deps ever fail to
 # import for any reason, seek_outlet_sql() just falls back to seek_outlet()
 # every time, same as if the cache .db were simply missing.
-_sys.path.insert(0, str(Path(__file__).resolve().parent / "omset_pipeline"))
+_sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "omset_pipeline"))
 try:
     import sql_cache as _sql_cache
 except Exception:
     _sql_cache = None
 
-CSV_DIR = Path(__file__).resolve().parent / "omset_pipeline" / "output" / "CSV"
+CSV_DIR = Path(__file__).resolve().parent.parent / "omset_pipeline" / "output" / "CSV"
 CACHE_DIR = CSV_DIR.parent / "CACHE"
 TOKO_GABUNGAN_DIR = paths.TOKO_GABUNGAN_DIR
 

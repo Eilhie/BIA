@@ -30,12 +30,12 @@ import extra_streamlit_components as stx
 import streamlit as st
 import yaml
 
-import database as db
+from core import database as db
 
 db.init_db()
 db.delete_expired_sessions()
 
-CONFIG_PATH = Path(__file__).parent / "config" / "config.yaml"
+CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "config.yaml"
 _config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
 LEVEL_LABELS = {int(k): v for k, v in _config.get("levels", {}).items()}
 PAGE_LEVELS = _config.get("pages", {})

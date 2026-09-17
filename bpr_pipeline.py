@@ -32,7 +32,7 @@ import pandas as pd
 import py7zr
 import xlrd
 
-import paths
+from core import paths
 
 RAW_SHEET = "BPR DETAIL"
 

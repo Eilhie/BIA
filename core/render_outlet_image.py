@@ -30,7 +30,7 @@ except ImportError as _e:
     MATPLOTLIB_AVAILABLE = False
     _MATPLOTLIB_IMPORT_ERROR = _e
 
-from omset_seeker import (
+from core.omset_seeker import (
     BRAND_ORDER,
     DIV_AB1_BRAND,
     HOREKA_KEG_BRAND_ORDER,
@@ -42,7 +42,7 @@ from omset_seeker import (
     seek_outlet,
 )
 
-OUTPUT_DIR = Path(__file__).resolve().parent / "omset_pipeline" / "output" / "IMAGE"
+OUTPUT_DIR = Path(__file__).resolve().parent.parent / "omset_pipeline" / "output" / "IMAGE"
 
 MONTHS_ID = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
 LABELS_25 = [f"{m}-25" for m in MONTHS_ID]

@@ -13,8 +13,8 @@ itu sendiri (sama seperti Toko Gabungan UMUM), bukan lewat form di app ini.
 import pandas as pd
 import streamlit as st
 
-import auth
-import omset_seeker as os_
+from core import auth
+from core import omset_seeker as os_
 
 auth.require_level(5, page="Gabungan HOREKA")
 st.title("Gabungan HOREKA")

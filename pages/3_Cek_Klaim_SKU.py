@@ -11,8 +11,8 @@ from io import BytesIO
 import pandas as pd
 import streamlit as st
 
-import auth
-import omset_seeker
+from core import auth
+from core import omset_seeker
 import sku_lookup
 
 auth.require_level(5, page="Cek Klaim SKU")

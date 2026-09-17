@@ -17,8 +17,8 @@ database.py (XP_WEIGHTS, compute_xp, xp_to_level).
 
 import streamlit as st
 
-import auth
-import database as db
+from core import auth
+from core import database as db
 
 user = auth.require_level(1, page="Home")
 username = user["username"]

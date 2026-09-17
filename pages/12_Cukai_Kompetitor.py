@@ -15,7 +15,7 @@ lihat cukai_pipeline.py.
 import pandas as pd
 import streamlit as st
 
-import auth
+from core import auth
 import cukai_pipeline as cp
 
 @st.cache_data(show_spinner=False, ttl="10m")

@@ -22,11 +22,11 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-import auth
-import paths
-import omset_seeker as os_
+from core import auth
+from core import paths
+from core import omset_seeker as os_
 import sku_lookup as sl
-from render_outlet_image import build_html_table, build_row_cells
+from core.render_outlet_image import build_html_table, build_row_cells
 
 auth.require_level(5, page="Detail SKU Brand Besar")
 st.title("Detail SKU Brand Besar")

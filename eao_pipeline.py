@@ -16,7 +16,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-import paths
+from core import paths
 
 SERVER_BASE = Path(r"\\10.4.1.25\Bev\EAO")
 LOCAL_DIR = paths.EAO_DIR
