@@ -49,7 +49,7 @@ PAGE_DEFS = [
     ("Sinkronisasi & Data", "pages/10_Atur_Gabungan_HOREKA.py", "Gabungan HOREKA", False),
     ("Sinkronisasi & Data", "pages/14_Atur_Gabungan_UMUM.py", "Gabungan UMUM", False),
     ("Sinkronisasi & Data", "pages/6_Cek_Cutoff_OMSHAR.py", "Cek Cutoff OMSHAR", False),
-    ("Sinkronisasi & Data", "pages/12_Cukai_Kompetitor.py", "Cukai Kompetitor", False),
+    ("Sinkronisasi & Data", "cukai/12_Cukai_Kompetitor.py", "Cukai Kompetitor", False),
     ("Sinkronisasi & Data", "pages/16_Setup_Daily_Report.py", "Setup Daily Report", False),
 
     ("Admin", "pages/8_Kelola_User.py", "Kelola User", False),

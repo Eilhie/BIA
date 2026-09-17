@@ -16,7 +16,7 @@ import pandas as pd
 import streamlit as st
 
 from core import auth
-import cukai_pipeline as cp
+from cukai import cukai_pipeline as cp
 
 @st.cache_data(show_spinner=False, ttl="10m")
 def get_rekap_rapih() -> pd.DataFrame:
