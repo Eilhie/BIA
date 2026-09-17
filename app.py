@@ -34,12 +34,12 @@ user = auth.get_current_user()
 # (section buat grouping di sidebar, path relatif ke file ini, judul di menu &
 # tab browser, jadikan default landing page)
 PAGE_DEFS = [
-    ("Utama", "pages/15_Home.py", "Home", True),
+    ("Utama", "admin/15_Home.py", "Home", True),
     ("Utama", "omset_search_app.py", "Omset Seeker", False),
     ("Utama", "mclub/5_Outlet_Lapisan_MClub.py", "Outlet Lapisan MClub", False),
     ("Utama", "sku/3_Cek_Klaim_SKU.py", "Cek Klaim SKU", False),
     ("Utama", "sku/7_Detail_SKU_Brand_Besar.py", "Detail SKU Brand Besar", False),
-    ("Utama", "pages/0_Dashboard.py", "Dashboard", False),
+    ("Utama", "admin/0_Dashboard.py", "Dashboard", False),
     ("Utama", "sku/2_SKU_Manifest.py", "SKU Manifest", False),
     ("Utama", "bpr/13_BPR.py", "BPR", False),
 
@@ -52,8 +52,8 @@ PAGE_DEFS = [
     ("Sinkronisasi & Data", "cukai/12_Cukai_Kompetitor.py", "Cukai Kompetitor", False),
     ("Sinkronisasi & Data", "daily_report/16_Setup_Daily_Report.py", "Setup Daily Report", False),
 
-    ("Admin", "pages/8_Kelola_User.py", "Kelola User", False),
-    ("Admin", "pages/9_Audit_Trail.py", "Audit Trail", False),
+    ("Admin", "admin/8_Kelola_User.py", "Kelola User", False),
+    ("Admin", "admin/9_Audit_Trail.py", "Audit Trail", False),
 ]
 
 sections: dict[str, list[st.Page]] = {}
