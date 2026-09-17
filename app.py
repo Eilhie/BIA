@@ -43,12 +43,12 @@ PAGE_DEFS = [
     ("Utama", "sku/2_SKU_Manifest.py", "SKU Manifest", False),
     ("Utama", "bpr/13_BPR.py", "BPR", False),
 
-    ("Sinkronisasi & Data", "pages/1_Sync_dan_Transpose.py", "Sync dan Transpose", False),
+    ("Sinkronisasi & Data", "sync/1_Sync_dan_Transpose.py", "Sync dan Transpose", False),
     ("Sinkronisasi & Data", "eao/11_EAO_Sync.py", "EAO Sync", False),
     ("Sinkronisasi & Data", "sku/4_Atur_SKU_Sync.py", "Atur SKU Sync", False),
-    ("Sinkronisasi & Data", "pages/10_Atur_Gabungan_HOREKA.py", "Gabungan HOREKA", False),
-    ("Sinkronisasi & Data", "pages/14_Atur_Gabungan_UMUM.py", "Gabungan UMUM", False),
-    ("Sinkronisasi & Data", "pages/6_Cek_Cutoff_OMSHAR.py", "Cek Cutoff OMSHAR", False),
+    ("Sinkronisasi & Data", "sync/10_Atur_Gabungan_HOREKA.py", "Gabungan HOREKA", False),
+    ("Sinkronisasi & Data", "sync/14_Atur_Gabungan_UMUM.py", "Gabungan UMUM", False),
+    ("Sinkronisasi & Data", "sync/6_Cek_Cutoff_OMSHAR.py", "Cek Cutoff OMSHAR", False),
     ("Sinkronisasi & Data", "cukai/12_Cukai_Kompetitor.py", "Cukai Kompetitor", False),
     ("Sinkronisasi & Data", "daily_report/16_Setup_Daily_Report.py", "Setup Daily Report", False),
 

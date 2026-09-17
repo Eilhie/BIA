@@ -22,14 +22,14 @@ pages:
   "pages/0_Dashboard.py": 5
   "sku/2_SKU_Manifest.py": 5
   "sku/3_Cek_Klaim_SKU.py": 5
-  "pages/6_Cek_Cutoff_OMSHAR.py": 5
+  "sync/6_Cek_Cutoff_OMSHAR.py": 5
   "sku/7_Detail_SKU_Brand_Besar.py": 5
   "sku/4_Atur_SKU_Sync.py": 5     # edit file SKU_LIST yang kontrol Sync
-  "pages/1_Sync_dan_Transpose.py": 5  # jalankan pipeline penuh, tulis ke DB produksi
+  "sync/1_Sync_dan_Transpose.py": 5  # jalankan pipeline penuh, tulis ke DB produksi
   "pages/8_Kelola_User.py": 5         # kelola akun (level, aktif/nonaktif, password)
   "pages/9_Audit_Trail.py": 5         # log akses & percobaan login, terpisah dari Kelola User
-  "pages/10_Atur_Gabungan_HOREKA.py": 5  # status/isi grup gabungan HOREKA (dari file Excel terpisah)
-  "pages/14_Atur_Gabungan_UMUM.py": 5  # status/isi grup gabungan UMUM (dari file Excel divisi lain)
+  "sync/10_Atur_Gabungan_HOREKA.py": 5  # status/isi grup gabungan HOREKA (dari file Excel terpisah)
+  "sync/14_Atur_Gabungan_UMUM.py": 5  # status/isi grup gabungan UMUM (dari file Excel divisi lain)
   "eao/11_EAO_Sync.py": 5           # monitoring server EAO + sync manual
   "cukai/12_Cukai_Kompetitor.py": 5   # estimasi volume kompetitor dari data cukai
   "daily_report/16_Setup_Daily_Report.py": 5  # salin file root Daily Report ke folder tanggal hari ini
