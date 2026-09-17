@@ -25,7 +25,7 @@ import streamlit as st
 from core import auth
 from core import paths
 from core import omset_seeker as os_
-import sku_lookup as sl
+from sku import sku_lookup as sl
 from core.render_outlet_image import build_html_table, build_row_cells
 
 auth.require_level(5, page="Detail SKU Brand Besar")

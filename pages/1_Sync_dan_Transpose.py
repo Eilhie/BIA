@@ -24,7 +24,7 @@ import streamlit as st
 from core import auth
 from core import omset_seeker
 from core import paths
-import sku_lookup
+from sku import sku_lookup
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "omset_pipeline"))
 import transpose as _t  # noqa: E402 -- cuma buat jumlah brand per mode (progress bar)

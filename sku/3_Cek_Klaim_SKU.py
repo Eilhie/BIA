@@ -13,7 +13,7 @@ import streamlit as st
 
 from core import auth
 from core import omset_seeker
-import sku_lookup
+from sku import sku_lookup
 
 auth.require_level(5, page="Cek Klaim SKU")
 st.title("Cek Klaim SKU")
