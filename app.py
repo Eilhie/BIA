@@ -25,7 +25,7 @@ from datetime import datetime
 import streamlit as st
 
 from core import auth
-import daily_report_setup as drs
+from daily_report import daily_report_setup as drs
 
 st.set_page_config(page_title="OMSET Seeker", layout="wide")
 
@@ -50,7 +50,7 @@ PAGE_DEFS = [
     ("Sinkronisasi & Data", "pages/14_Atur_Gabungan_UMUM.py", "Gabungan UMUM", False),
     ("Sinkronisasi & Data", "pages/6_Cek_Cutoff_OMSHAR.py", "Cek Cutoff OMSHAR", False),
     ("Sinkronisasi & Data", "cukai/12_Cukai_Kompetitor.py", "Cukai Kompetitor", False),
-    ("Sinkronisasi & Data", "pages/16_Setup_Daily_Report.py", "Setup Daily Report", False),
+    ("Sinkronisasi & Data", "daily_report/16_Setup_Daily_Report.py", "Setup Daily Report", False),
 
     ("Admin", "pages/8_Kelola_User.py", "Kelola User", False),
     ("Admin", "pages/9_Audit_Trail.py", "Audit Trail", False),
