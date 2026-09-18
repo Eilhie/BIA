@@ -30,9 +30,10 @@ last_processed_*.txt
 # Stray artifact (accidental file, not real output)
 /CSV
 
-# mimir: local vector index + local audit db (per-machine, not shared)
+# mimir: local vector index + local audit db + local benchmark log (per-machine, not shared)
 mimir/.index/
 mimir/.audit.db
+mimir/.bench.jsonl
 
 # Claude Code local/session-specific config
 .claude/settings.local.json
