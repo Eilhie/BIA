@@ -1,10 +1,12 @@
 # wiki-llm requirements
-# Own isolated venv, separate from omset-app/requirements.txt -- kept
-# independent so this experimental stack's dependencies (chromadb, ollama
-# client, FastAPI) never touch the production app's environment.
+# venv is created with --system-site-packages, so pandas/streamlit/numpy
+# are inherited from the global Python install (already trusted by Windows
+# after months of production use by omset-app) rather than re-extracted as
+# fresh, unsigned copies -- a fresh copy of a native-extension package in a
+# brand-new venv can trigger a one-time Windows Application Control /
+# Smart App Control scan that may take a while (or, observed once, not
+# clear at all within a reasonable wait) before it's allowed to load.
+# Only genuinely new packages need to be listed here.
 
 ollama
 chromadb
-fastapi
-uvicorn
-streamlit
