@@ -1,7 +1,13 @@
 """
 database.py
 Modul untuk koneksi SQLite, inisialisasi tabel, dan fungsi logging/audit trail.
-Ditempatkan di root project (D:\\SDAAREA), berjalan berdampingan dengan app.py.
+
+DB_PATH dihitung dari __file__ (bukan path relatif polos) supaya tidak
+bergantung pada current working directory saat Streamlit dijalankan --
+sebelumnya "DB/auth/access_log.db" polos diam-diam resolve ke lokasi BEDA
+begitu .bat yang menjalankan app pindah direktori kerja (mis. root ->
+omset-app/), yang bikin app kelihatan seperti "database kosong" padahal
+databasenya masih ada, cuma dicari di tempat yang salah.
 """
 
 import sqlite3
@@ -9,8 +15,8 @@ from datetime import datetime, timedelta
 from contextlib import contextmanager
 from pathlib import Path
 
-# Path database - sesuai struktur folder DB/auth
-DB_PATH = "DB/auth/access_log.db"
+# Path database - sesuai struktur folder DB/auth, relatif ke lokasi file ini
+DB_PATH = str(Path(__file__).resolve().parent.parent / "DB" / "auth" / "access_log.db")
 
 
 @contextmanager
