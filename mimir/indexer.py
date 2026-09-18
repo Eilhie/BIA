@@ -1,9 +1,9 @@
 """
-indexer.py
-Builds the local doc-QA knowledge base: chunks the repo root README.md plus
-every omset-app module's top-level docstring, embeds each chunk via Ollama's
-nomic-embed-text (fully local, nothing leaves the machine), and stores them
-in a persistent Chroma collection at wiki-llm/.index/.
+indexer.py (Mimir)
+Builds Mimir's local doc-QA knowledge base: chunks the repo root README.md
+plus every omset-app module's top-level docstring, embeds each chunk via
+Ollama's nomic-embed-text (fully local, nothing leaves the machine), and
+stores them in a persistent Chroma collection at mimir/.index/.
 
 Run manually to (re)build the index:
     venv/Scripts/python.exe indexer.py

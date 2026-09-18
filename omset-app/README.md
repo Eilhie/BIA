@@ -1,5 +1,7 @@
 # omset-app
 
+**Codename: Heimdall** — the Norse watchman who sees and hears everything happening across the nine realms, blowing the horn when something needs attention. Fitting for an app whose job is watching over many brands, outlets, and pipelines at once (Dashboard, Cek Cutoff, EAO Sync, Audit Trail) and surfacing what needs action. This is a display/branding name only — folder and module names are unchanged.
+
 The OMSHAR/EAO sales reporting app — a multi-user Streamlit app served over the office LAN, with login and per-page access levels (0–5).
 
 ## Entry points

@@ -1,14 +1,18 @@
 """
-app.py (wiki-llm)
-Chat UI for the local Wiki LLM -- retrieval-augmented Q&A over omset-app's
-README + module docstrings, running entirely through a local Ollama
-instance (localhost:11434 only, nothing leaves this machine).
+app.py (Mimir)
+Chat UI for Mimir, the local Wiki LLM -- retrieval-augmented Q&A over
+omset-app's README + module docstrings, running entirely through a local
+Ollama instance (localhost:11434 only, nothing leaves this machine).
+
+Named after the Norse keeper of wisdom, whose counsel could always be
+sought -- the point of this app: institutional "why" knowledge that stays
+answerable, not buried in scattered code comments and one person's memory.
 
 Deliberately calls the index + Ollama directly in-process rather than
 through a separate API service -- this is a single-user local tool, so a
 second HTTP hop would only add moving parts without solving a real problem.
 
-Run via wiki-llm/run.bat, or manually:
+Run via mimir/run.bat, or manually:
     venv/Scripts/python.exe -m streamlit run app.py --server.port 8600
 """
 
@@ -18,7 +22,7 @@ import streamlit as st
 
 import indexer
 
-st.set_page_config(page_title="Wiki LLM - SDA", layout="wide")
+st.set_page_config(page_title="Mimir - SDA", layout="wide")
 
 MODELS = ["hermes3:8b", "qwen2.5:7b-instruct"]
 TOP_K = 4
@@ -61,7 +65,7 @@ def build_prompt(query: str, chunks: list[dict]) -> str:
 
 # ── Sidebar ──────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.header("Wiki LLM")
+    st.header("Mimir")
     st.caption("Lokal & offline -- tidak ada data yang keluar dari mesin ini.")
 
     model = st.selectbox("Model", MODELS, index=0)
@@ -87,7 +91,7 @@ with st.sidebar:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-st.title("Wiki LLM -- SDA Internal")
+st.title("Mimir -- SDA Internal Wiki")
 st.caption("Tanya apa saja tentang cara kerja pipeline OMSHAR/EAO. Jawaban diambil dari README + komentar kode, bukan dikarang.")
 
 for msg in st.session_state.messages:

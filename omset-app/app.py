@@ -27,7 +27,7 @@ import streamlit as st
 from core import auth
 from daily_report import daily_report_setup as drs
 
-st.set_page_config(page_title="OMSET Seeker", layout="wide")
+st.set_page_config(page_title="Heimdall - OMSET Seeker", layout="wide")
 
 user = auth.get_current_user()
 

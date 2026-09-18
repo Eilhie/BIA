@@ -1,4 +1,4 @@
-# wiki-llm requirements
+# mimir requirements
 # venv is created with --system-site-packages, so pandas/streamlit/numpy
 # are inherited from the global Python install (already trusted by Windows
 # after months of production use by omset-app) rather than re-extracted as
