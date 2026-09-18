@@ -71,7 +71,7 @@ goto :selesai
 echo.
 echo Menjalankan: python transpose.py %TRANS_MODE%
 echo.
-cd /d "D:\SDAAREA\omset-app\omset_pipeline"
+cd /d "D:\SDAAREA\heimdall\omset_pipeline"
 python transpose.py %TRANS_MODE%
 cd /d "D:\SDAAREA"
 

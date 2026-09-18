@@ -1,7 +1,7 @@
 """
 indexer.py (Mimir)
 Builds Mimir's local doc-QA knowledge base: chunks the repo root README.md
-plus every omset-app module's top-level docstring, embeds each chunk via
+plus every heimdall module's top-level docstring, embeds each chunk via
 Ollama's nomic-embed-text (fully local, nothing leaves the machine), and
 stores them in a persistent Chroma collection at mimir/.index/.
 
@@ -16,7 +16,7 @@ import chromadb
 import ollama
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-OMSET_APP_DIR = REPO_ROOT / "omset-app"
+HEIMDALL_DIR = REPO_ROOT / "heimdall"
 README_PATH = REPO_ROOT / "README.md"
 INDEX_DIR = Path(__file__).resolve().parent / ".index"
 COLLECTION_NAME = "sda_wiki"
@@ -44,12 +44,12 @@ def chunk_text(text: str, source: str) -> list[dict]:
 
 
 def collect_module_docstrings() -> list[dict]:
-    """Every .py file under omset-app/ with a non-trivial top-level
+    """Every .py file under heimdall/ with a non-trivial top-level
     docstring -- these already carry the rationale/history the user writes
     by hand (see e.g. bpr_pipeline.py, mclub_pipeline.py), which is exactly
     the kind of "why" a doc-QA index should answer from."""
     docs = []
-    for path in sorted(OMSET_APP_DIR.rglob("*.py")):
+    for path in sorted(HEIMDALL_DIR.rglob("*.py")):
         if "__pycache__" in path.parts:
             continue
         try:
@@ -74,7 +74,7 @@ def build_index() -> int:
         all_chunks.extend(chunk_text(doc["text"], doc["source"]))
 
     if not all_chunks:
-        raise RuntimeError("No chunks produced -- check REPO_ROOT/OMSET_APP_DIR paths")
+        raise RuntimeError("No chunks produced -- check REPO_ROOT/HEIMDALL_DIR paths")
 
     embeddings = []
     for chunk in all_chunks:

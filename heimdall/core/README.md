@@ -1,6 +1,6 @@
 # core
 
-Shared infrastructure used by every other app in `omset-app/`. Nothing here is domain-specific — if a change would only make sense for one brand/workflow, it belongs in that domain's own folder instead.
+Shared infrastructure used by every other app in `heimdall/`. Nothing here is domain-specific — if a change would only make sense for one brand/workflow, it belongs in that domain's own folder instead.
 
 ## Key files
 

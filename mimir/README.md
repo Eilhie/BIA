@@ -2,7 +2,7 @@
 
 **Codename: Mimir** — the Norse keeper of wisdom, whose counsel could always be sought even after everything else was gone. This app exists for the same reason: the "why" behind this codebase's decisions currently lives only in scattered code comments and one person's memory — Mimir makes it something anyone can ask, in plain language, at any time.
 
-A local-only Wiki LLM: retrieval-augmented Q&A over `omset-app`'s `README.md` and every module's docstrings, answered by a locally-run LLM (via [Ollama](https://ollama.com)). Nothing — not the questions, not the documentation, not the answers — ever leaves this machine.
+A local-only Wiki LLM: retrieval-augmented Q&A over `heimdall`'s `README.md` and every module's docstrings, answered by a locally-run LLM (via [Ollama](https://ollama.com)). Nothing — not the questions, not the documentation, not the answers — ever leaves this machine.
 
 ## Running it
 
@@ -16,7 +16,7 @@ Opens at `http://localhost:8600`.
 
 ## How it works
 
-1. **`indexer.py`** — chunks the repo's `README.md` + every `omset-app` module's top-level docstring, embeds each chunk locally via Ollama's `nomic-embed-text`, and stores them in a Chroma vector database at `.index/` (gitignored — rebuild anytime with the sidebar's "Bangun ulang index" button, or `venv/Scripts/python.exe indexer.py`).
+1. **`indexer.py`** — chunks the repo's `README.md` + every `heimdall` module's top-level docstring, embeds each chunk locally via Ollama's `nomic-embed-text`, and stores them in a Chroma vector database at `.index/` (gitignored — rebuild anytime with the sidebar's "Bangun ulang index" button, or `venv/Scripts/python.exe indexer.py`).
 2. **`app.py`** — the chat UI. On each question, it embeds the question, retrieves the most relevant indexed chunks, and asks a local LLM to answer using only that retrieved context — never inventing anything the docs don't say.
 
 ## Current capability

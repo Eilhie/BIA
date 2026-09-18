@@ -144,7 +144,7 @@ set "OMSHAR_DIR=%TEST_DB%"
 set "TRANSPOSE_OUT=%TEST_OUT%"
 set "TRANSPOSE_CSV=%TEST_CSV%"
 
-cd /d "D:\SDAAREA\omset-app\omset_pipeline"
+cd /d "D:\SDAAREA\heimdall\omset_pipeline"
 python transpose.py %TRANS_MODE%
 cd /d "D:\SDAAREA"
 

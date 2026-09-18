@@ -27,7 +27,7 @@ goto menu
 
 :heimdall_local
 title Heimdall - OMSET Seeker
-cd /d "D:\SDAAREA\omset-app"
+cd /d "D:\SDAAREA\heimdall"
 echo.
 echo Membuka Heimdall di browser (localhost saja, tidak ke internet)...
 python -m streamlit run app.py --server.headless false --server.address localhost
@@ -35,7 +35,7 @@ goto end
 
 :heimdall_lan
 title Heimdall - OMSET Seeker (LAN)
-cd /d "D:\SDAAREA\omset-app"
+cd /d "D:\SDAAREA\heimdall"
 echo.
 echo Mencari alamat IP lokal PC ini...
 for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /i "IPv4"') do set LOCAL_IP=%%a

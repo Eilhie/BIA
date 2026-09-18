@@ -6,7 +6,7 @@ DB_PATH dihitung dari __file__ (bukan path relatif polos) supaya tidak
 bergantung pada current working directory saat Streamlit dijalankan --
 sebelumnya "DB/auth/access_log.db" polos diam-diam resolve ke lokasi BEDA
 begitu .bat yang menjalankan app pindah direktori kerja (mis. root ->
-omset-app/), yang bikin app kelihatan seperti "database kosong" padahal
+heimdall/), yang bikin app kelihatan seperti "database kosong" padahal
 databasenya masih ada, cuma dicari di tempat yang salah.
 """
 

@@ -1,7 +1,7 @@
 """
 app.py (Mimir)
 Chat UI for Mimir, the local Wiki LLM -- retrieval-augmented Q&A over
-omset-app's README + module docstrings, running entirely through a local
+heimdall's README + module docstrings, running entirely through a local
 Ollama instance (localhost:11434 only, nothing leaves this machine).
 
 Named after the Norse keeper of wisdom, whose counsel could always be
@@ -28,7 +28,7 @@ MODELS = ["hermes3:8b", "qwen2.5:7b-instruct"]
 TOP_K = 4
 
 SYSTEM_PROMPT = """Anda adalah asisten dokumentasi internal untuk sistem pelaporan \
-penjualan OMSHAR/EAO milik PT SDA (folder omset-app/). Jawab HANYA berdasarkan \
+penjualan OMSHAR/EAO milik PT SDA (folder heimdall/, codename Heimdall). Jawab HANYA berdasarkan \
 potongan dokumentasi yang diberikan di bawah -- jangan mengarang informasi yang \
 tidak ada di situ.
 
