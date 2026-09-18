@@ -93,6 +93,35 @@ def collect_memories() -> list[dict]:
     return docs
 
 
+def read_claude_memory_lenient(path: Path, warn: bool = True) -> dict | None:
+    """Reads one Claude Code memory file, tolerating a real formatting
+    quirk in some of them: files written before consistent use of
+    yaml.safe_dump() can have a double-quoted frontmatter value containing
+    a literal Windows path ("D:\\EAO...") that YAML tries to interpret as
+    an escape sequence. Retries once by doubling backslashes -- these
+    frontmatter fields are just name/description/metadata, never real
+    escape sequences, so this is safe rather than a hack that could
+    silently corrupt genuine content. Returns None (optionally warning)
+    if the file truly can't be read, rather than raising -- shared by
+    collect_claude_memories() and the Lihat Memory page so both handle
+    this identically instead of drifting apart."""
+    try:
+        return memory_store.read_memory(path)
+    except yaml.YAMLError:
+        try:
+            text = path.read_text(encoding="utf-8")
+            _, fm_text, body = text.split("---\n", 2)
+            fixed_fm = fm_text.replace("\\", "\\\\")
+            frontmatter = yaml.safe_load(fixed_fm) or {}
+            return {"frontmatter": frontmatter, "body": body.strip(), "path": path}
+        except (ValueError, yaml.YAMLError) as e:
+            if warn:
+                print(f"  [skip] {path.name}: {e}")
+            return None
+    except ValueError:
+        return None  # no frontmatter at all -- not a memory file we can read
+
+
 def collect_claude_memories() -> list[dict]:
     """Claude Code's own pre-existing memory files for this project --
     checked defensively since this lives outside the repo and outside
@@ -104,27 +133,9 @@ def collect_claude_memories() -> list[dict]:
     for path in sorted(CLAUDE_MEMORY_DIR.glob("*.md")):
         if path.name == "MEMORY.md":
             continue
-        try:
-            mem = memory_store.read_memory(path)
-        except yaml.YAMLError:
-            # Some of these files predate consistent use of yaml.safe_dump()
-            # for writing, so a double-quoted value can contain a literal
-            # Windows path ("D:\EAO...") that YAML tries to interpret as an
-            # escape sequence. Retry once by doubling backslashes -- these
-            # frontmatter fields are just name/description/metadata, never
-            # real escape sequences, so this is safe rather than a hack
-            # that could silently corrupt genuine content.
-            try:
-                text = path.read_text(encoding="utf-8")
-                _, fm_text, body = text.split("---\n", 2)
-                fixed_fm = fm_text.replace("\\", "\\\\")
-                frontmatter = yaml.safe_load(fixed_fm) or {}
-                mem = {"frontmatter": frontmatter, "body": body.strip(), "path": path}
-            except (ValueError, yaml.YAMLError) as e:
-                print(f"  [skip] {path.name}: {e}")
-                continue
-        except ValueError:
-            continue  # no frontmatter at all -- not a memory file we can read
+        mem = read_claude_memory_lenient(path)
+        if mem is None:
+            continue
         fm = mem["frontmatter"]
         metadata = fm.get("metadata") or {}
         docs.append({
