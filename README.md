@@ -1,10 +1,11 @@
-# OT AUTOMATION
+# SDA Automation
 
-Aplikasi web (Streamlit, multi-halaman) untuk mengolah data OMSHAR dari server jadi
-CSV query-ready + laporan PNG per outlet, plus sejumlah halaman pendukung lain
-(klaim SKU, gabungan toko, cukai kompetitor, BPR, dsb). Awalnya kumpulan `.bat`
-+ script command-line -- sekarang semuanya lewat satu web app, `.bat` lama tetap
-ada sebagai jalur command-line kalau dibutuhkan.
+Repo ini berisi dua project terpisah:
+
+- **[`heimdall/`](heimdall/README.md)** (codename Heimdall) — aplikasi web (Streamlit, multi-halaman) untuk mengolah data OMSHAR dari server jadi CSV query-ready + laporan PNG per outlet, plus sejumlah halaman pendukung lain (klaim SKU, gabungan toko, cukai kompetitor, BPR, dsb). Ini yang dijelaskan sisa dokumen ini.
+- **[`mimir/`](mimir/README.md)** (codename Mimir) — Wiki LLM lokal (tanya-jawab tentang cara kerja sistem ini, jawaban diambil dari dokumentasi asli, bukan dikarang).
+
+Dulu Heimdall adalah kumpulan `.bat` + script command-line yang berdiri sendiri di root repo; sekarang semuanya lewat satu web app, dibuka lewat **`BIFROST.bat`** (menu buat pilih Heimdall/Heimdall LAN/Heimdall DEV/Mimir). `.bat` yang masih relevan di luar itu: `AMBIL DATA BARU TEST.bat` (sync ke folder test, tidak menyentuh data produksi) dan `BUKA OMSHAR.bat` (buka file `.xls` mentah langsung per SKU, tanpa lewat web app).
 
 ---
 
@@ -12,49 +13,34 @@ ada sebagai jalur command-line kalau dibutuhkan.
 
 ```
 D:\SDAAREA\
-├── AMBIL DATA BARU.bat          ← Entry point lama (sync + transpose, command-line)
-├── AMBIL DATA BARU TEST.bat     ← Versi test (semua output ke test\)
-├── SYNC OMSHAR FAST.bat         ← Sync OMSHAR saja (tanpa transpose)
+├── BIFROST.bat                  ← Satu-satunya launcher: pilih Heimdall/Heimdall LAN/Heimdall DEV/Mimir
+├── AMBIL DATA BARU TEST.bat     ← Sync + transpose ke test\ (tidak menyentuh DB produksi)
+├── BUKA OMSHAR.bat              ← Buka file .xls mentah langsung per SKU (manual)
 ├── README.md                    ← File ini
-├── app.py                       ← Entry point web app -- daftar & urutan semua halaman
-├── auth.py / database.py        ← Login, level akses (0-5), audit trail (SQLite)
 │
-├── omset_seeker.py              ← Query data outlet dari CSV (dipakai banyak halaman)
-├── render_outlet_image.py       ← Generate tabel HTML/PNG laporan OMSET OUTLET
-├── omset_search_app.py          ← Halaman utama web app — Cari Outlet (Omset Seeker)
-├── sku_lookup.py                ← Query per-SKU individual (dipakai Cek Klaim SKU, Detail SKU Brand Besar)
-├── cukai_pipeline.py            ← Baca (read-only) data cukai kompetitor
-├── render_bpr.py / bpr_pipeline.py ← Pipeline BPR (rekap NORM/STOK/DOI/Order)
-├── CARI OUTLET.bat              ← Buka web app di browser (localhost saja)
+├── heimdall\                    ← Codename Heimdall -- app OMSHAR/EAO, lihat heimdall/README.md
+│   ├── app.py                       ← Entry point web app -- daftar & urutan semua halaman
+│   ├── config\config.yaml           ← Level akses per halaman
+│   ├── core\                        ← auth, database, paths, omset_seeker, render_outlet_image (dipakai semua domain)
+│   ├── omset_search_app.py          ← Halaman utama web app — Cari Outlet (Omset Seeker)
+│   ├── omset_pipeline\              ← transpose.py, gabungan_live_generator.py, sql_cache.py
+│   │   └── output\
+│   │       ├── DB TRANSPOSED\UMUM\      ← XLSX per brand UMUM (untuk atasan)
+│   │       ├── DB TRANSPOSED\HOREKA\    ← XLSX per brand HOREKA (untuk atasan)
+│   │       ├── CSV\UMUM\                ← CSV query UMUM (input omset_seeker)
+│   │       ├── CSV\HOREKA\              ← CSV query HOREKA (input omset_seeker)
+│   │       └── CSV\{UMUM,HOREKA}\SKU_RAW\ ← Cache cepat per SKU individual (fallback: baca .xls mentah, ~20-25 detik/SKU)
+│   ├── mclub\, cukai\, daily_report\, bpr\, eao\, sku\, sync\, admin\
+│   │                                 ← Satu folder per domain (pipeline + halaman terkait), lihat README masing-masing
+│   └── DB\auth\access_log.db        ← SQLite: akun, sesi, audit trail (gitignored)
 │
-├── pages\                       ← Semua halaman lain di web app yang sama
-│   ├── 0_Dashboard.py               ← Ringkasan status Sync/Transpose/Gabungan/coverage SKU
-│   ├── 1_Sync_dan_Transpose.py      ← Sync dari server + Transpose ke CSV/XLSX
-│   ├── 2_SKU_Manifest.py            ← Single source of truth: SKU_LIST vs DEST_DB vs brand mapping
-│   ├── 3_Cek_Klaim_SKU.py           ← QTY per varian SKU per outlet, buat verifikasi klaim promo
-│   ├── 4_Atur_SKU_Sync.py           ← Edit SKU_LIST (apa yang ditarik Sync)
-│   ├── 5_Outlet_Lapisan_MClub.py    ← Klasifikasi tier outlet Gold/Platinum/MCLUB + analisis kompetitif
-│   ├── 6_Cek_Cutoff_OMSHAR.py       ← Cutoff per file mentah, sebelum Transpose dijalankan
-│   ├── 7_Detail_SKU_Brand_Besar.py  ← Breakdown per varian SKU (bukan cuma total brand) untuk 7 brand besar
-│   ├── 8_Kelola_User.py             ← Admin: buat/ubah akun, level akses, reset password
-│   ├── 9_Audit_Trail.py             ← Admin: log akses & percobaan login
-│   ├── 10_Atur_Gabungan_HOREKA.py   ← Status/isi grup gabungan HOREKA (read-only)
-│   ├── 11_EAO_Sync.py               ← Monitoring sync EAO (sistem terpisah dari OMSHAR)
-│   ├── 12_Cukai_Kompetitor.py       ← Estimasi volume kompetitor dari data cukai (read-only)
-│   ├── 13_BPR.py                    ← Rekap NORM/STOK/DOI/Order harian per Depo & Wilayah
-│   └── 14_Atur_Gabungan_UMUM.py     ← Status/isi grup gabungan UMUM (read-only)
-│
-└── omset_pipeline\
-    ├── transpose.py             ← Konversi XLS mentah → XLSX + CSV per brand
-    ├── sql_cache.py             ← Prototipe cache SQLite (belum dipakai halaman manapun)
-    ├── RUN.bat                  ← Shortcut transpose manual
-    └── output\
-        ├── DB TRANSPOSED\UMUM\  ← XLSX per brand UMUM (untuk atasan)
-        ├── DB TRANSPOSED\HOREKA\← XLSX per brand HOREKA (untuk atasan)
-        ├── CSV\UMUM\            ← CSV query UMUM (input omset_seeker)
-        ├── CSV\HOREKA\          ← CSV query HOREKA (input omset_seeker)
-        └── CSV\{UMUM,HOREKA}\SKU_RAW\ ← Cache cepat per SKU individual (fallback: baca .xls mentah, ~20-25 detik/SKU)
+└── mimir\                       ← Codename Mimir -- Wiki LLM lokal, lihat mimir/README.md
+    ├── app.py                       ← Chat UI (Streamlit, port 8600)
+    ├── indexer.py                   ← Bangun index dari README + docstring
+    └── .index\                      ← Vector DB Chroma (gitignored)
 ```
+
+Setiap folder domain di dalam `heimdall\` (`core`, `mclub`, `cukai`, `daily_report`, `bpr`, `eao`, `sku`, `sync`, `admin`, `omset_pipeline`) punya `README.md` sendiri yang menjelaskan isinya lebih detail -- lihat [`heimdall/README.md`](heimdall/README.md) untuk daftar lengkap.
 
 **Data mentah & config, di luar folder ini:**
 - `D:\DB OMSHAR\DB\` — XLS OMSHAR hasil sync dari server (bukan `D:\SDAAREA\DB`, itu default kosong)
@@ -67,11 +53,11 @@ D:\SDAAREA\
 
 ## Prasyarat
 
-Python 3.x dengan dependency di `requirements.txt` (`streamlit`, `pandas`,
+Python 3.x dengan dependency di `heimdall/requirements.txt` (`streamlit`, `pandas`,
 `openpyxl`, `xlrd`, `matplotlib`, `bcrypt`, `extra-streamlit-components`,
 `PyYAML`, `py7zr`):
 ```
-pip install -r requirements.txt
+pip install -r heimdall/requirements.txt
 ```
 
 Akses jaringan ke `\\10.4.1.25\Bev\OMSHAR`
@@ -82,13 +68,12 @@ Akses jaringan ke `\\10.4.1.25\Bev\OMSHAR`
 
 ### 1. Ambil Data Baru (rutin setelah OMSHAR diupdate di server)
 
-**Cara termudah (tanpa command line):** double-click **`CARI OUTLET.bat`**,
-lalu buka halaman **"Sync dan Transpose"** di sidebar. Centang UMUM/HOREKA,
-klik Mulai Sync (sync ke `D:\DB OMSHAR\DB`, bukan `D:\SDAAREA\DB`), lalu
-pilih mode transpose dan klik Mulai Transpose — log berjalan live di layar,
-tidak perlu buka Command Prompt sama sekali.
-
-**Lewat command line/.bat lama** (kalau perlu): double-click **`AMBIL DATA BARU.bat`**
+Double-click **`BIFROST.bat`**, pilih **Heimdall**, lalu buka halaman
+**"Sync dan Transpose"** di sidebar. Centang UMUM/HOREKA, klik Mulai Sync
+(sync ke `D:\DB OMSHAR\DB`, bukan `D:\SDAAREA\DB`), lalu pilih mode
+transpose dan klik Mulai Transpose — log berjalan live di layar, tidak
+perlu buka Command Prompt sama sekali. Ini satu-satunya cara resmi
+sekarang -- lihat [`heimdall/sync/README.md`](heimdall/sync/README.md).
 
 **Step 1 — Sync OMSHAR**
 - Membaca daftar SKU dari `D:\DB OMSHAR\SKU_LIST\UMUM\` dan `HOREKA\`
@@ -125,42 +110,16 @@ tidak perlu buka Command Prompt sama sekali.
 
 ### 2. Query Data Outlet
 
-**Cara termudah (tanpa command line):** double-click **`CARI OUTLET.bat`**.
-Membuka web app di browser (`http://localhost:8501`, hanya bisa diakses dari
-komputer ini sendiri, tidak ter-expose ke jaringan/internet). Isi Site
-number, pilih grup, klik Cari — tabel muncul, ada tombol untuk generate &
-download PNG laporan. Centang "Tampilkan KEG/PET (HOREKA)" di sidebar untuk
-memunculkan breakdown brand draft/keg/PET tambahan pada outlet HOREKA.
-
-**Lewat command line** (kalau perlu):
-```
-cd D:\SDAAREA
-python omset_seeker.py
-```
-
-Masukkan **Site number** (contoh: `0815-02000166`) dan grup (`UMUM` atau `HOREKA`).
-Menampilkan tabel KRT per brand per bulan + validasi terhadap total BIR.
+Double-click **`BIFROST.bat`**, pilih **Heimdall**. Membuka web app di
+browser (`http://localhost:8501`, hanya bisa diakses dari komputer ini
+sendiri, tidak ter-expose ke jaringan/internet). Isi Site number, pilih
+grup, klik Cari — tabel muncul, ada tombol untuk generate & download PNG
+laporan. Centang "Tampilkan KEG/PET (HOREKA)" di sidebar untuk memunculkan
+breakdown brand draft/keg/PET tambahan pada outlet HOREKA.
 
 ---
 
-### 3. Generate PNG Laporan
-
-```
-cd D:\SDAAREA
-python render_outlet_image.py
-```
-
-Output disimpan di `omset_pipeline\output\IMAGE\`.
-
----
-
-### 4. Transpose Manual (tanpa sync)
-
-Double-click **`omset_pipeline\RUN.bat`** — pilih mode transpose.
-
----
-
-### 5. Sync EAO
+### 3. Sync EAO
 
 Double-click **`D:\EAO\sync_eao.bat`**
 
@@ -274,7 +233,7 @@ pakai sebelum SKU-nya benar-benar disync -- `process_brand()` otomatis
 - CSV suffix `_query.csv` sudah tanpa 8 baris header, digunakan Python
 - CSV suffix tanpa `_query` menyertakan header, untuk dibuka di Excel
 - `transpose.py` mendukung override path via env var:
-  - `OMSHAR_DIR` — sumber XLS (default: `D:\SDAAREA\DB`, di web app di-set ke `D:\DB OMSHAR\DB` lewat `pages/1_Sync_dan_Transpose.py`)
+  - `OMSHAR_DIR` — sumber XLS (default: `D:\SDAAREA\DB`, di web app di-set ke `D:\DB OMSHAR\DB` lewat `heimdall/sync/1_Sync_dan_Transpose.py`)
   - `TRANSPOSE_OUT` — output XLSX (default: `omset_pipeline\output\DB TRANSPOSED`)
   - `TRANSPOSE_CSV` — output CSV (default: `omset_pipeline\output\CSV`)
 - **`paths.py`** — satu sumber kebenaran untuk semua path data eksternal (di luar
