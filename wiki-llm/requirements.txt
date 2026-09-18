@@ -1,0 +1,10 @@
+# wiki-llm requirements
+# Own isolated venv, separate from omset-app/requirements.txt -- kept
+# independent so this experimental stack's dependencies (chromadb, ollama
+# client, FastAPI) never touch the production app's environment.
+
+ollama
+chromadb
+fastapi
+uvicorn
+streamlit

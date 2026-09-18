@@ -30,6 +30,10 @@ last_processed_*.txt
 # Stray artifact (accidental file, not real output)
 /CSV
 
+# wiki-llm: local vector index + local audit db (per-machine, not shared)
+wiki-llm/.index/
+wiki-llm/.audit.db
+
 # Claude Code local/session-specific config
 .claude/settings.local.json
 
