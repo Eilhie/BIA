@@ -34,6 +34,9 @@ st.set_page_config(page_title="Mimir - SDA", layout="wide")
 MODELS = ["hermes3:8b", "qwen2.5:7b-instruct"]
 TOP_K = 4
 CATAT_PREFIX = "catat:"
+MAX_HISTORY_MESSAGES = 20  # ~10 exchanges -- plenty of headroom left in either
+                           # model's context window, just bounded so a very
+                           # long session doesn't keep growing the prompt forever
 
 SYSTEM_PROMPT = """Nama Anda adalah Mimir -- asisten wiki internal (Wiki LLM) milik \
 PT SDA yang berjalan sepenuhnya lokal di komputer ini. Anda BUKAN Heimdall -- \
@@ -95,6 +98,24 @@ def retrieve_context(query: str, top_k: int = TOP_K) -> list[dict]:
 def build_prompt(query: str, chunks: list[dict]) -> str:
     context = "\n\n".join(f"[{c['source']}]\n{c['text']}" for c in chunks)
     return f"Konteks dokumentasi:\n\n{context}\n\nPertanyaan: {query}"
+
+
+def build_history(exclude_last: bool = True) -> list[dict]:
+    """Prior turns as plain {role, content} dicts for ollama.chat(), capped
+    to MAX_HISTORY_MESSAGES. Without this, every question was previously
+    sent as an isolated conversation with no memory of anything said
+    before it in the same session -- the chat log LOOKED continuous
+    (Streamlit just replays session_state.messages on screen) but the
+    model itself never saw any of it, so a follow-up like "kenapa kamu
+    bilang begitu" (why did you say that) had literally nothing to refer
+    back to and just repeated a generic answer.
+
+    exclude_last=True drops the just-appended current question, since
+    that gets sent separately (with fresh retrieved context attached),
+    not replayed as bare history."""
+    msgs = st.session_state.messages[:-1] if exclude_last else st.session_state.messages
+    history = [{"role": m["role"], "content": m["content"]} for m in msgs]
+    return history[-MAX_HISTORY_MESSAGES:]
 
 
 def draft_memory(model: str, raw_text: str) -> tuple[dict, dict]:
@@ -297,6 +318,7 @@ if question := st.chat_input("Tanya sesuatu, atau `catat: ...` untuk mencatat me
                     model=model,
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
+                        *build_history(),
                         {"role": "user", "content": prompt},
                     ],
                     stream=True,
