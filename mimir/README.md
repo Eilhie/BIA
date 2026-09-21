@@ -22,10 +22,12 @@ Opens at `http://localhost:8600`.
 ## Current capability
 
 - ✅ Answers "how does X work" / "why is Y done this way" questions, grounded in real docs, with sources shown under every answer.
-- ❌ Cannot yet answer questions about live data (e.g. "what's the omset for outlet X") — it's explicitly instructed to say so rather than invent a number. Real-data lookups (calling `omset_seeker`/`sku_lookup` directly) are planned next.
+- ✅ Looks up real outlet data by calling Heimdall's own functions (`tools.py` → `core.omset_seeker`): `cari_outlet` (omset per brand per month for a site number) and `cari_nama_outlet` (find a site number from part of an outlet name). The raw returned table is shown in a 🔧 panel under the answer, so the model's narration can always be checked against what the function actually returned.
+- 🔒 **Scope is outlet lookup only, on purpose.** Heimdall gates SKU-claim/dashboard data behind Admin login; Mimir has no login, so exposing those here would silently bypass that gate. Widening `tools.py` means deciding the access-control question first.
+- ⚠️ **Known limits of tool use** (7–8B local models): a model can still misread a table or paraphrase a brand name wrongly even when the tool result is correct — check the 🔧 panel for anything important. `cari_outlet` pre-computes the latest month and per-brand values for exactly this reason. It only does lookups; it can't compute totals, compare outlets, or touch anything Heimdall writes.
 
 ## Environment notes
 
 - Own isolated `venv/`, created with `--system-site-packages` so `pandas`/`streamlit`/`numpy` are inherited from the global Python install (already trusted by Windows after months of production use) rather than re-installed as fresh copies — a fresh native-extension package in a brand-new venv can trigger a Windows Application Control / Smart App Control scan that isn't guaranteed to clear quickly.
-- Models used: `hermes3:8b` and `qwen2.5:7b-instruct` (switchable in the sidebar, for an ongoing side-by-side comparison — no default has been picked yet), plus `nomic-embed-text` for embeddings.
+- Models used: `qwen2.5:7b-instruct` (default) and `hermes3:8b` (switchable in the sidebar), plus `nomic-embed-text` for embeddings. Qwen became the default after testing both with the outlet tools (3 runs per case, small sample but consistent on every axis): chained name→data lookups 3/3 vs 1/3, relaying "site not found" 3/3 vs 0/3, follow-up numbers correct 3/3 vs 2/3. Hermes, despite its function-calling reputation, more often described the tool call or promised to fetch data instead of calling it.
 - Ollama is confirmed bound to `127.0.0.1:11434` only — verify with `netstat -ano | findstr 11434` if in doubt.

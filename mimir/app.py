@@ -28,12 +28,16 @@ import streamlit as st
 import bench
 import indexer
 import memory_store
+import tools
 
 st.set_page_config(page_title="Mimir - SDA", layout="wide")
 
-MODELS = ["hermes3:8b", "qwen2.5:7b-instruct"]
+# Qwen first = default. Measured with the outlet tools (3 runs/case): Qwen chained
+# name->data lookups 3/3 vs Hermes 1/3, relayed "tidak ditemukan" 3/3 vs 0/3.
+MODELS = ["qwen2.5:7b-instruct", "hermes3:8b"]
 TOP_K = 4
 CATAT_PREFIX = "catat:"
+MAX_TOOL_ROUNDS = 2  # a lookup then a possible follow-up (e.g. search name -> fetch outlet)
 MAX_HISTORY_MESSAGES = 20  # ~10 exchanges -- plenty of headroom left in either
                            # model's context window, just bounded so a very
                            # long session doesn't keep growing the prompt forever
@@ -45,18 +49,31 @@ OMSHAR/EAO, dan tugas Anda adalah menjawab pertanyaan TENTANG Heimdall berdasark
 dokumentasinya, bukan menjadi Heimdall itu sendiri. Kalau ditanya siapa Anda, \
 jawab: Anda adalah Mimir.
 
-Jawab HANYA berdasarkan potongan dokumentasi yang diberikan di bawah -- jangan \
-mengarang informasi yang tidak ada di situ. Konteks yang diberikan bisa berasal dari \
-README/docstring kode Heimdall, ATAU dari memory yang sudah dicatat sebelumnya \
-(keputusan, koreksi, proses, atau struktur file Excel) -- keduanya sama validnya \
-sebagai sumber jawaban.
+Untuk pertanyaan tentang CARA KERJA sistem, jawab HANYA berdasarkan referensi \
+dokumentasi yang diberikan -- jangan mengarang informasi yang tidak ada di situ. \
+Referensi bisa berasal dari README/docstring kode Heimdall, ATAU dari memory yang \
+sudah dicatat sebelumnya (keputusan, koreksi, proses, atau struktur file Excel) -- \
+keduanya sama validnya. Untuk permintaan DATA outlet, referensi dokumentasi tidak \
+relevan: langsung panggil tool, jangan menjelaskan langkah-langkah cara memakai \
+Heimdall atau menulis kode.
 
-PENTING: Anda belum bisa mengambil angka penjualan/omset/klaim SKU yang sebenarnya \
-(fitur pencarian data real belum tersambung ke chat ini). Kalau user menanyakan \
-angka spesifik (omset outlet tertentu, QTY klaim SKU, dsb), JANGAN mengarang \
-angka -- katakan dengan jelas bahwa Anda hanya bisa menjawab pertanyaan tentang \
-cara kerja sistem, dan arahkan user ke halaman aslinya di app utama (Omset Seeker, \
-Cek Klaim SKU, dst) untuk angka real.
+PENTING soal angka: Anda punya dua tool untuk data outlet nyata dari Heimdall -- \
+cari_outlet (data omset satu outlet berdasarkan site number) dan cari_nama_outlet \
+(cari site number dari nama outlet). Kalau user meminta data/angka outlet, PANGGIL tool, \
+jangan menebak. Semua angka yang Anda sebut HARUS persis dari hasil tool -- jangan \
+mengarang, membulatkan, atau menghitung sendiri. Kalau tool bilang tidak ditemukan atau \
+gagal, sampaikan apa adanya. Kalau user menyebut nama outlet tanpa site number, panggil \
+cari_nama_outlet dulu. Anda TIDAK punya akses ke klaim SKU atau data Admin lainnya -- \
+untuk itu arahkan user ke halaman terkait di Heimdall. Untuk pertanyaan tentang cara \
+kerja sistem (bukan data outlet), jawab dari dokumentasi tanpa memanggil tool.
+
+Aturan tool: (1) JANGAN berjanji akan mengambil data ("tunggu sebentar", "saya akan \
+mencoba") -- langsung panggil tool di giliran yang sama. (2) Untuk pertanyaan LANJUTAN \
+tentang angka (mis. "bulan terakhir", "brand apa saja"), panggil tool lagi -- jangan \
+membaca angka dari jawaban Anda sebelumnya di percakapan. (3) Sampaikan hasil tool apa \
+adanya dan ringkas; kalau outlet tidak ditemukan, katakan langsung "Site ... tidak \
+ditemukan". Gunakan baris "BULAN TERAKHIR" dan "Nilai per brand di bulan terakhir" dari \
+hasil tool untuk pertanyaan soal bulan terakhir.
 
 Jawab dalam Bahasa Indonesia, singkat dan jelas."""
 
@@ -97,7 +114,15 @@ def retrieve_context(query: str, top_k: int = TOP_K) -> list[dict]:
 
 def build_prompt(query: str, chunks: list[dict]) -> str:
     context = "\n\n".join(f"[{c['source']}]\n{c['text']}" for c in chunks)
-    return f"Konteks dokumentasi:\n\n{context}\n\nPertanyaan: {query}"
+    # Question first, docs second and labelled as conditional: with the docs
+    # first, retrieved README text about "how to search an outlet in Heimdall's
+    # UI" pulled the model into explaining those steps instead of calling the
+    # tool for a data request.
+    return (
+        f"Pertanyaan: {query}\n\n"
+        "Referensi dokumentasi (hanya untuk pertanyaan tentang cara kerja sistem; "
+        f"untuk permintaan data outlet abaikan dan panggil tool):\n\n{context}"
+    )
 
 
 def build_history(exclude_last: bool = True) -> list[dict]:
@@ -239,6 +264,12 @@ st.caption(
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
+        for out in msg.get("tool_outputs") or []:
+            with st.expander(f"🔧 {out['title']}", expanded=True):
+                if out["table"] is not None:
+                    st.dataframe(out["table"])
+                else:
+                    st.caption(out["model_text"])
         if msg.get("timing"):
             st.caption(bench.format_caption(msg["timing"]))
         if msg.get("sources"):
@@ -313,39 +344,67 @@ if question := st.chat_input("Tanya sesuatu, atau `catat: ...` untuk mencatat me
             sources = sorted({c["source"] for c in chunks})
 
             prompt = build_prompt(question, chunks)
-            try:
-                stream = ollama.chat(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        *build_history(),
-                        {"role": "user", "content": prompt},
-                    ],
-                    stream=True,
-                )
-            except Exception as e:
-                st.error(
-                    f"Gagal menghubungi Ollama ({type(e).__name__}: {e}) -- "
-                    "pastikan Ollama sudah jalan (`ollama serve`) dan model-nya sudah di-pull."
-                )
-                st.stop()
+            convo = [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                *build_history(),
+                {"role": "user", "content": prompt},
+            ]
 
             # Simpan chunk TERAKHIR (done=True) -- itu yang bawa statistik asli
             # dari Ollama sendiri (eval_count/eval_duration, dst), dipakai
             # bench.log() untuk hitung tokens/sec yang akurat (bukan cuma
             # wall-clock Python yang ikut kehitung overhead Streamlit).
             final_part = {}
+            tool_outputs = []  # tabel mentah hasil tool, ditampilkan langsung ke user
 
             def token_stream():
-                for part in stream:
-                    if part.get("done"):
-                        final_part.update(part)
-                    content = part.get("message", {}).get("content", "")
-                    if content:
-                        yield content
+                """Streams the answer; if the model asks for a tool, runs it
+                (Heimdall's real function -- see tools.py), feeds the result
+                back, and streams the follow-up. Bounded by MAX_TOOL_ROUNDS so
+                a model that keeps calling tools can't loop forever."""
+                messages = convo
+                for round_no in range(MAX_TOOL_ROUNDS + 1):
+                    stream = ollama.chat(
+                        model=model,
+                        messages=messages,
+                        # Last round offers no tools -> forces a plain-text answer.
+                        tools=tools.TOOL_SCHEMAS if round_no < MAX_TOOL_ROUNDS else None,
+                        stream=True,
+                    )
+                    text, calls = "", []
+                    for part in stream:
+                        if part.get("done"):
+                            final_part.update(part)
+                        msg = part.get("message", {})
+                        content = msg.get("content", "")
+                        if content:
+                            text += content
+                            yield content
+                        calls.extend(msg.get("tool_calls") or [])
+                    if not calls:
+                        return
+                    messages = [*messages, {"role": "assistant", "content": text, "tool_calls": calls}]
+                    for call in calls:
+                        result = tools.run_tool(call.function.name, dict(call.function.arguments or {}))
+                        tool_outputs.append(result)
+                        messages.append({"role": "tool", "tool_name": call.function.name, "content": result["model_text"]})
 
-            answer = st.write_stream(token_stream())
+            try:
+                answer = st.write_stream(token_stream())
+            except Exception as e:
+                st.error(
+                    f"Gagal menghubungi Ollama ({type(e).__name__}: {e}) -- "
+                    "pastikan Ollama sudah jalan (`ollama serve`) dan model-nya sudah di-pull."
+                )
+                st.stop()
             t_end = time.perf_counter()
+
+            for out in tool_outputs:
+                with st.expander(f"🔧 {out['title']}", expanded=True):
+                    if out["table"] is not None:
+                        st.dataframe(out["table"])
+                    else:
+                        st.caption(out["model_text"])
 
             timing = bench.log(
                 "chat", model,
@@ -362,4 +421,5 @@ if question := st.chat_input("Tanya sesuatu, atau `catat: ...` untuk mencatat me
 
         st.session_state.messages.append({
             "role": "assistant", "content": answer, "sources": sources, "timing": timing,
+            "tool_outputs": tool_outputs,
         })
