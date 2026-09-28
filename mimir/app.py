@@ -204,8 +204,13 @@ def render_copy_print_widget(png_bytes: bytes) -> None:
     isolated iframe, so the same fixed element ids/function name are safe
     to reuse across multiple outlet lookups shown in one chat session.
 
-    Uses st.iframe() (raw-HTML-string form), not components.html() --
-    the latter is deprecated in this Streamlit version."""
+    Uses st.iframe() (raw-HTML-string form), not components.html() -- the
+    latter is deprecated in this Streamlit version. height="content" was
+    tried first per st.iframe's own docs ("auto-sizes to content height")
+    but left a large blank gap in practice for this snippet-style content
+    (buttons + a hidden print stylesheet, not a full laid-out page) --
+    reverted to a fixed height=50, same as the working components.html()
+    call this replaced."""
     b64 = base64.b64encode(png_bytes).decode()
     st.iframe(
         f"""
@@ -292,7 +297,7 @@ def render_copy_print_widget(png_bytes: bytes) -> None:
         document.getElementById('print-link').href = URL.createObjectURL(printBlob);
         </script>
         """,
-        height="content",
+        height=50,
     )
 
 
