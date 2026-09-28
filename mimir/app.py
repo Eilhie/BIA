@@ -32,9 +32,12 @@ import tools
 
 st.set_page_config(page_title="Mimir - SDA", layout="wide")
 
-# Qwen first = default. Measured with the outlet tools (3 runs/case): Qwen chained
-# name->data lookups 3/3 vs Hermes 1/3, relayed "tidak ditemukan" 3/3 vs 0/3.
-MODELS = ["qwen2.5:7b-instruct", "hermes3:8b"]
+# qwen3:8b replaced qwen2.5:7b-instruct and hermes3:8b (both removed) after a
+# 3-run comparison: matched or beat qwen2.5 on every axis (see memory of this
+# comparison). deepseek-r1:8b was also tested and removed -- it never called
+# the tool for direct data requests (0/3), instead fabricating an empty
+# template mimicking the tool's own output labels with no real data behind it.
+MODELS = ["qwen3:8b"]
 TOP_K = 4
 CATAT_PREFIX = "catat:"
 MAX_TOOL_ROUNDS = 2  # a lookup then a possible follow-up (e.g. search name -> fetch outlet)
