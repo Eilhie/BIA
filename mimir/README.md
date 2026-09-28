@@ -17,7 +17,11 @@ Opens at `http://localhost:8600`.
 ## How it works
 
 1. **`indexer.py`** — chunks the repo's `README.md` + every `heimdall` module's top-level docstring, embeds each chunk locally via Ollama's `nomic-embed-text`, and stores them in a Chroma vector database at `.index/` (gitignored — rebuild anytime with the sidebar's "Bangun ulang index" button, or `venv/Scripts/python.exe indexer.py`).
-2. **`app.py`** — the chat UI. On each question, it embeds the question, retrieves the most relevant indexed chunks, and asks a local LLM to answer using only that retrieved context — never inventing anything the docs don't say.
+2. **`app.py`** — the chat UI, in two phases per question:
+   1. **Routing** — the question (+ conversation history) is sent to the model with the outlet tools offered, but **no documentation attached at all**. If the model calls a tool, that's the whole answer path — real Heimdall data in, real data out, documentation never enters the picture.
+   2. **Doc-QA** — only if the model didn't call a tool: retrieve the most relevant indexed chunks *now*, and answer from that context, no tools offered this round.
+
+   Docs and tools are never both in front of the model in the same turn. This was a real fix, not a design choice made up front — see "Current capability" below.
 
 ## Current capability
 
@@ -26,6 +30,7 @@ Opens at `http://localhost:8600`.
 - ✅ **Copy / Print / Download** the outlet report, same as Heimdall's Omset Seeker page — reuses that page's own battle-tested JS (clipboard API with a LAN-safe fallback, print via a Blob-URL `<a>` instead of `window.open()`) and PNG generation (`render_outlet_report`), not a reimplementation.
 - 🔒 **Scope is outlet lookup only, on purpose.** Heimdall gates SKU-claim/dashboard data behind Admin login; Mimir has no login, so exposing those here would silently bypass that gate. Widening `tools.py` means deciding the access-control question first.
 - ⚠️ **Known limits of tool use** (7–8B local models): a model can still misread a table or paraphrase a brand name wrongly even when the tool result is correct — check the 🔧 panel for anything important. `cari_outlet` pre-computes the latest month and per-brand values for exactly this reason. It only does lookups; it can't compute totals, compare outlets, or touch anything Heimdall writes.
+- 🐛 **Fixed twice, then fixed structurally**: retrieved documentation used to be attached alongside the tool list on *every* question. For phrasings that happened to retrieve detailed, genuinely relevant docs (e.g. anything mentioning "gabungan"), the model would answer from that documentation instead of calling the tool it was told to call for data requests — twice, with two different trigger phrasings, even after adding an explicit prompt rule for the first one. The real fix was architectural (see "How it works" above): decide tool-vs-docs *before* retrieval ever runs, so the two never compete for the model's attention in the same turn.
 
 ## Environment notes
 

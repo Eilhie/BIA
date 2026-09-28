@@ -463,63 +463,116 @@ if question := st.chat_input("Tanya sesuatu, atau `catat: ...` untuk mencatat me
     else:
         with st.chat_message("assistant"):
             t0 = time.perf_counter()
-            with st.spinner("Mencari dokumentasi relevan..."):
-                try:
-                    chunks = retrieve_context(question)
-                except Exception as e:
-                    st.error(
-                        f"Gagal menghubungi Ollama/index ({type(e).__name__}: {e}) -- "
-                        "pastikan Ollama sudah jalan (`ollama serve`) dan index sudah dibangun."
-                    )
-                    st.stop()
-            t_retrieved = time.perf_counter()
-            sources = sorted({c["source"] for c in chunks})
+            final_part = {}
+            tool_outputs = []
+            sources = []
+            retrieval_s = 0.0  # stays 0 on the tool path -- no retrieval happens there at all
 
-            prompt = build_prompt(question, chunks)
-            convo = [
+            # Phase 1 -- decide tool-vs-docs BEFORE any documentation is
+            # retrieved or shown to the model at all. Previously, retrieval
+            # always ran first and docs + tools were offered together every
+            # time; for phrasings that happened to retrieve detailed, highly
+            # relevant documentation (e.g. "shao kao gabungan horeka" pulling
+            # in the Gabungan HOREKA page's docstring), the model would answer
+            # from that documentation instead of calling the tool it was
+            # explicitly told to call for data requests -- confirmed live,
+            # twice, with different trigger phrasings each time (see memory
+            # "dokumentasi-ter-retrieve-bisa-membuat-model-menolak-tool-
+            # padahal-bisa"). Adding another explicit prompt rule fixed the
+            # exact phrasing tested but not the next one -- the fix has to be
+            # structural: never let retrieved docs and tool-availability
+            # compete for the model's attention in the same turn.
+            decide_messages = [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 *build_history(),
-                {"role": "user", "content": prompt},
+                {"role": "user", "content": question},
             ]
-
-            # Simpan chunk TERAKHIR (done=True) -- itu yang bawa statistik asli
-            # dari Ollama sendiri (eval_count/eval_duration, dst), dipakai
-            # bench.log() untuk hitung tokens/sec yang akurat (bukan cuma
-            # wall-clock Python yang ikut kehitung overhead Streamlit).
-            final_part = {}
-            tool_outputs = []  # tabel mentah hasil tool, ditampilkan langsung ke user
-
-            def token_stream():
-                """Streams the answer; if the model asks for a tool, runs it
-                (Heimdall's real function -- see tools.py), feeds the result
-                back, and streams the follow-up. Bounded by MAX_TOOL_ROUNDS so
-                a model that keeps calling tools can't loop forever."""
-                messages = convo
-                for round_no in range(MAX_TOOL_ROUNDS + 1):
-                    stream = ollama.chat(
-                        model=model,
-                        messages=messages,
-                        # Last round offers no tools -> forces a plain-text answer.
-                        tools=tools.TOOL_SCHEMAS if round_no < MAX_TOOL_ROUNDS else None,
-                        stream=True,
+            with st.spinner("Memproses pertanyaan..."):
+                try:
+                    decide_resp = ollama.chat(model=model, messages=decide_messages, tools=tools.TOOL_SCHEMAS)
+                except Exception as e:
+                    st.error(
+                        f"Gagal menghubungi Ollama ({type(e).__name__}: {e}) -- "
+                        "pastikan Ollama sudah jalan (`ollama serve`) dan model-nya sudah di-pull."
                     )
-                    text, calls = "", []
+                    st.stop()
+            calls = decide_resp["message"].get("tool_calls") or []
+
+            if calls:
+                # Data-lookup path -- execute the tool(s) the model already
+                # decided to call. Documentation is never retrieved or shown
+                # in this path at all, on purpose.
+                messages = [
+                    *decide_messages,
+                    {"role": "assistant", "content": decide_resp["message"].get("content", ""), "tool_calls": calls},
+                ]
+                for call in calls:
+                    result = tools.run_tool(call.function.name, dict(call.function.arguments or {}))
+                    tool_outputs.append(result)
+                    messages.append({"role": "tool", "tool_name": call.function.name, "content": result["model_text"]})
+
+                def token_stream():
+                    """Streams the follow-up after the first tool round
+                    above; if the model chains another tool call (e.g. search
+                    a name, then fetch its data), runs that too. Bounded by
+                    MAX_TOOL_ROUNDS total (this counts as round 1) so a model
+                    that keeps calling tools can't loop forever."""
+                    for round_no in range(1, MAX_TOOL_ROUNDS + 1):
+                        stream = ollama.chat(
+                            model=model,
+                            messages=messages,
+                            # Last round offers no tools -> forces a plain-text answer.
+                            tools=tools.TOOL_SCHEMAS if round_no < MAX_TOOL_ROUNDS else None,
+                            stream=True,
+                        )
+                        text, more_calls = "", []
+                        for part in stream:
+                            if part.get("done"):
+                                final_part.update(part)
+                            msg = part.get("message", {})
+                            content = msg.get("content", "")
+                            if content:
+                                text += content
+                                yield content
+                            more_calls.extend(msg.get("tool_calls") or [])
+                        if not more_calls:
+                            return
+                        messages.append({"role": "assistant", "content": text, "tool_calls": more_calls})
+                        for call in more_calls:
+                            result = tools.run_tool(call.function.name, dict(call.function.arguments or {}))
+                            tool_outputs.append(result)
+                            messages.append({"role": "tool", "tool_name": call.function.name, "content": result["model_text"]})
+            else:
+                # Doc-QA path -- the model itself judged this isn't a data
+                # lookup. NOW retrieve documentation/memory and answer from
+                # it; no tools offered this round.
+                t_decided = time.perf_counter()
+                with st.spinner("Mencari dokumentasi relevan..."):
+                    try:
+                        chunks = retrieve_context(question)
+                    except Exception as e:
+                        st.error(
+                            f"Gagal menghubungi Ollama/index ({type(e).__name__}: {e}) -- "
+                            "pastikan Ollama sudah jalan (`ollama serve`) dan index sudah dibangun."
+                        )
+                        st.stop()
+                sources = sorted({c["source"] for c in chunks})
+                prompt = build_prompt(question, chunks)
+                messages = [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    *build_history(),
+                    {"role": "user", "content": prompt},
+                ]
+                retrieval_s = time.perf_counter() - t_decided
+
+                def token_stream():
+                    stream = ollama.chat(model=model, messages=messages, stream=True)
                     for part in stream:
                         if part.get("done"):
                             final_part.update(part)
-                        msg = part.get("message", {})
-                        content = msg.get("content", "")
+                        content = part.get("message", {}).get("content", "")
                         if content:
-                            text += content
                             yield content
-                        calls.extend(msg.get("tool_calls") or [])
-                    if not calls:
-                        return
-                    messages = [*messages, {"role": "assistant", "content": text, "tool_calls": calls}]
-                    for call in calls:
-                        result = tools.run_tool(call.function.name, dict(call.function.arguments or {}))
-                        tool_outputs.append(result)
-                        messages.append({"role": "tool", "tool_name": call.function.name, "content": result["model_text"]})
 
             try:
                 answer = st.write_stream(token_stream())
@@ -548,16 +601,17 @@ if question := st.chat_input("Tanya sesuatu, atau `catat: ...` untuk mencatat me
 
             timing = bench.log(
                 "chat", model,
-                retrieval_s=t_retrieved - t0,
-                generate_s=t_end - t_retrieved,
+                retrieval_s=retrieval_s,
+                generate_s=(t_end - t0) - retrieval_s,
                 total_s=t_end - t0,
                 ollama_stats=final_part or None,
             )
             st.caption(bench.format_caption(timing))
 
-            with st.expander("Sumber"):
-                for s in sources:
-                    st.caption(f"📄 {s}")
+            if sources:
+                with st.expander("Sumber"):
+                    for s in sources:
+                        st.caption(f"📄 {s}")
 
         st.session_state.messages.append({
             "role": "assistant", "content": answer, "sources": sources, "timing": timing,
