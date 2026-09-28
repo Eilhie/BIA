@@ -35,6 +35,33 @@ def _omset_seeker():
     return omset_seeker
 
 
+def _render_outlet_image():
+    if str(HEIMDALL_DIR) not in sys.path:
+        sys.path.insert(0, str(HEIMDALL_DIR))
+    from core import render_outlet_image
+    return render_outlet_image
+
+
+def _render_outlet_html(site: str, tipe: str) -> str | None:
+    """Same rendering Heimdall's own Omset Seeker page uses (build_report_rows
+    + build_html_table, core/render_outlet_image.py) -- reused as-is here so
+    Mimir shows the real report layout instead of an LLM's prose narration of
+    the numbers. Returns None on any failure (site genuinely not found is
+    already handled by the caller via seek_outlet; this is purely a display
+    enhancement, so a render failure must not break the tool call itself)."""
+    try:
+        roi = _render_outlet_image()
+        seeker = _omset_seeker()
+        row_cells, _, _ = roi.build_report_rows(site, tipe)
+        brand_cutoffs = {
+            row[2]: seeker.get_cutoff_date(brand=row[2], omshar_type=tipe)
+            for row in row_cells
+        }
+        return roi.build_html_table(row_cells, cutoffs=brand_cutoffs)
+    except Exception:
+        return None
+
+
 @lru_cache(maxsize=2)
 def _outlet_index(tipe: str) -> pd.DataFrame:
     return _omset_seeker().build_outlet_index(tipe)
@@ -83,16 +110,25 @@ def cari_outlet(site: str, tipe: str = "UMUM", bulan_terakhir: int = 6) -> dict:
         f"- {brand}: " + "; ".join(f"{m}={view.loc[brand, m]}" for m in cols)
         for brand in view.index
     )
+    html = _render_outlet_html(site, tipe)
+    shown_note = (
+        "Tabel laporan lengkap SUDAH ditampilkan ke user di bawah jawaban Anda -- "
+        "jangan mengetik ulang seluruh rincian per bulan, cukup ringkas 1-2 kalimat "
+        "(mis. bulan terakhir + hal yang ditanya) dan arahkan user melihat tabelnya."
+        if html else ""
+    )
     model_text = (
         f"Outlet -- {header}\n"
         f"Bulan yang ada datanya (lama ke baru): {', '.join(cols)}\n"
         f"BULAN TERAKHIR yang ada datanya: {last_month}\n"
         f"Nilai per brand di bulan terakhir ({last_month}), KRT: {latest}\n"
-        f"Rincian per brand per bulan (KRT):\n{detail}"
+        f"Rincian per brand per bulan (KRT):\n{detail}\n"
+        f"{shown_note}"
     )
     return {
         "model_text": model_text,
         "table": view,
+        "html": html,
         "title": f"cari_outlet(site={site}, tipe={tipe}) -- {info.get('Outlet', '')}",
     }
 

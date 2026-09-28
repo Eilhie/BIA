@@ -10,3 +10,4 @@ file is embedded individually — see `indexer.py`'s `collect_memories()`).
 - [Cek angka jawaban tool per sel, bukan sekadar ada atau tidak](memory/corrections/cek-angka-jawaban-tool-per-sel-bukan-sekadar-ada-atau-tidak.md) — correction
 - [Memory berbahasa Inggris tidak ketemu oleh pertanyaan berbahasa Indonesia](memory/corrections/memory-berbahasa-inggris-tidak-ketemu-oleh-pertanyaan-berbahasa-indonesia.md) — correction
 - [Ganti model default Mimir ke qwen3:8b, hapus deepseek-r1](memory/decisions/ganti-model-default-mimir-ke-qwen3-8b-hapus-deepseek-r1.md) — decision
+- [cari_outlet render tabel HTML asli Heimdall, bukan teks LLM](memory/decisions/cari-outlet-render-tabel-html-asli-heimdall-bukan-teks-llm.md) — decision

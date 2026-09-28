@@ -269,7 +269,9 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
         for out in msg.get("tool_outputs") or []:
             with st.expander(f"🔧 {out['title']}", expanded=True):
-                if out["table"] is not None:
+                if out.get("html"):
+                    st.markdown(out["html"], unsafe_allow_html=True)
+                elif out["table"] is not None:
                     st.dataframe(out["table"])
                 else:
                     st.caption(out["model_text"])
@@ -404,7 +406,9 @@ if question := st.chat_input("Tanya sesuatu, atau `catat: ...` untuk mencatat me
 
             for out in tool_outputs:
                 with st.expander(f"🔧 {out['title']}", expanded=True):
-                    if out["table"] is not None:
+                    if out.get("html"):
+                        st.markdown(out["html"], unsafe_allow_html=True)
+                    elif out["table"] is not None:
                         st.dataframe(out["table"])
                     else:
                         st.caption(out["model_text"])
