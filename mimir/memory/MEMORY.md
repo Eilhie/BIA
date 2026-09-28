@@ -12,3 +12,4 @@ file is embedded individually — see `indexer.py`'s `collect_memories()`).
 - [Ganti model default Mimir ke qwen3:8b, hapus deepseek-r1](memory/decisions/ganti-model-default-mimir-ke-qwen3-8b-hapus-deepseek-r1.md) — decision
 - [cari_outlet render tabel HTML asli Heimdall, bukan teks LLM](memory/decisions/cari-outlet-render-tabel-html-asli-heimdall-bukan-teks-llm.md) — decision
 - [Tambah tombol Copy/Print/Download di laporan outlet Mimir](memory/decisions/tambah-tombol-copy-print-download-di-laporan-outlet-mimir.md) — decision
+- [Dokumentasi ter-retrieve bisa membuat model menolak tool padahal bisa](memory/corrections/dokumentasi-ter-retrieve-bisa-membuat-model-menolak-tool-padahal-bisa.md) — correction

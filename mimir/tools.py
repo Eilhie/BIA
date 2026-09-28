@@ -189,7 +189,10 @@ TOOL_SCHEMAS = [
             "description": (
                 "Ambil data omset (KRT per brand per bulan) untuk SATU outlet berdasarkan "
                 "site number persis (format seperti 0815-02000166). Pakai HANYA kalau user "
-                "meminta data/omset/angka outlet dan sudah menyebut site number-nya."
+                "meminta data/omset/angka outlet dan sudah menyebut site number-nya. Juga "
+                "berlaku untuk outlet GABUNGAN (site code dari cari_nama_outlet yang bertanda "
+                "'(Gabungan)') -- otomatis menjumlahkan semua toko anggotanya, tidak perlu "
+                "tool terpisah."
             ),
             "parameters": {
                 "type": "object",
@@ -208,7 +211,11 @@ TOOL_SCHEMAS = [
             "name": "cari_nama_outlet",
             "description": (
                 "Cari outlet berdasarkan potongan NAMA (bukan site number) untuk menemukan "
-                "site number-nya. Pakai kalau user menyebut nama outlet tapi belum ada site number."
+                "site number-nya. Pakai kalau user menyebut nama outlet tapi belum ada site "
+                "number -- TERMASUK kalau user minta outlet/grup GABUNGAN (merged). Hasil "
+                "gabungan ditandai '(Gabungan)' di kolom Outlet; tidak ditemukan berarti "
+                "memang belum ada grup gabungan dengan nama itu, bukan berarti tool ini tidak "
+                "mendukungnya."
             ),
             "parameters": {
                 "type": "object",

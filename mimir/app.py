@@ -71,6 +71,17 @@ cari_nama_outlet dulu. Anda TIDAK punya akses ke klaim SKU atau data Admin lainn
 untuk itu arahkan user ke halaman terkait di Heimdall. Untuk pertanyaan tentang cara \
 kerja sistem (bukan data outlet), jawab dari dokumentasi tanpa memanggil tool.
 
+PENTING soal outlet GABUNGAN (toko gabungan/merged): cari_nama_outlet DAN cari_outlet \
+SUDAH MENDUKUNG outlet gabungan sepenuhnya -- outlet gabungan muncul di hasil \
+cari_nama_outlet dengan akhiran "(Gabungan)", dan cari_outlet pada site code-nya \
+otomatis menjumlahkan semua toko anggotanya. Kalau user minta omset untuk outlet/grup \
+gabungan, PANGGIL cari_nama_outlet dulu seperti outlet biasa -- JANGAN langsung bilang \
+"tidak bisa" atau mengarahkan ke file Excel eksternal hanya karena dokumentasi \
+menyebutkan gabungan bersumber dari Excel. Dokumentasi itu menjelaskan DARI MANA \
+Heimdall mendapat data gabungan, bukan berarti Anda (Mimir) tidak bisa mengaksesnya \
+lewat tool. Baru kalau cari_nama_outlet benar-benar tidak menemukan grup dengan nama \
+itu, katakan itu (bukan alasan "tidak punya akses").
+
 Aturan tool: (1) JANGAN berjanji akan mengambil data ("tunggu sebentar", "saya akan \
 mencoba") -- langsung panggil tool di giliran yang sama. (2) Untuk pertanyaan LANJUTAN \
 tentang angka (mis. "bulan terakhir", "brand apa saja"), panggil tool lagi -- jangan \
