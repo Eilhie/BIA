@@ -16,6 +16,7 @@ Run via mimir/run.bat, or manually:
     venv/Scripts/python.exe -m streamlit run app.py --server.port 8600
 """
 
+import base64
 import io
 import json
 import time
@@ -191,6 +192,110 @@ def extract_excel_structure(file_bytes: bytes, filename: str) -> str:
     return "\n".join(lines)
 
 
+def render_copy_print_widget(png_bytes: bytes) -> None:
+    """Copy-to-clipboard + Print buttons for a report PNG -- ported from
+    heimdall/omset_search_app.py's Omset Seeker page rather than
+    reimplemented, since that JS already went through real
+    browser-compatibility debugging (clipboard API is blocked outside a
+    "secure context" -- https:// or http://localhost -- with a
+    contenteditable+execCommand fallback for LAN access; Print navigates a
+    real <a> to a Blob URL instead of window.open(), since the latter is
+    popup-blocked from an iframe). Each st.iframe() call runs in its own
+    isolated iframe, so the same fixed element ids/function name are safe
+    to reuse across multiple outlet lookups shown in one chat session.
+
+    Uses st.iframe() (raw-HTML-string form), not components.html() --
+    the latter is deprecated in this Streamlit version."""
+    b64 = base64.b64encode(png_bytes).decode()
+    st.iframe(
+        f"""
+        <style>
+          .action-btn {{
+            display: inline-block; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer;
+            border-radius: 0.5rem; border: 1px solid #999; margin-right: 0.5rem;
+            color: inherit; text-decoration: none; background: #f0f2f6;
+            font-family: inherit;
+          }}
+        </style>
+        <button class="action-btn" onclick="copyReportImage()">Copy to Clipboard</button>
+        <a id="print-link" class="action-btn" href="#" target="_blank" rel="noopener noreferrer">Print</a>
+        <span id="action-status" style="margin-left:0.5rem;"></span>
+        <script>
+        const reportImgSrc = "data:image/png;base64,{b64}";
+
+        async function copyReportImage() {{
+            const status = document.getElementById('action-status');
+            status.textContent = 'Menyalin...';
+            try {{
+                const resp = await fetch(reportImgSrc);
+                const blob = await resp.blob();
+                if (!(window.isSecureContext && navigator.clipboard && navigator.clipboard.write)) {{
+                    throw new Error('clipboard-api-unavailable');
+                }}
+                await navigator.clipboard.write([new ClipboardItem({{'image/png': blob}})]);
+                status.textContent = 'Tersalin!';
+                return;
+            }} catch (e) {{
+                // lanjut ke fallback di bawah
+            }}
+            try {{
+                const ok = await copyImageLegacyFallback();
+                status.textContent = ok ? 'Tersalin!' : 'Gagal copy -- coba Print atau klik kanan gambar > Copy image.';
+            }} catch (e2) {{
+                status.textContent = 'Gagal copy -- klik kanan gambar (kalau tabel HTML terlihat) atau pakai Print.';
+            }}
+        }}
+
+        function copyImageLegacyFallback() {{
+            return new Promise((resolve, reject) => {{
+                const container = document.createElement('div');
+                container.contentEditable = 'true';
+                container.style.position = 'fixed';
+                container.style.left = '-9999px';
+                const img = document.createElement('img');
+                img.onload = () => {{
+                    document.body.appendChild(container);
+                    container.appendChild(img);
+                    const range = document.createRange();
+                    range.selectNode(img);
+                    const sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    let ok = false;
+                    try {{
+                        ok = document.execCommand('copy');
+                    }} catch (e3) {{
+                        ok = false;
+                    }}
+                    sel.removeAllRanges();
+                    document.body.removeChild(container);
+                    resolve(ok);
+                }};
+                img.onerror = () => reject(new Error('image-load-failed'));
+                img.src = reportImgSrc;
+            }});
+        }}
+
+        const printHtml =
+            '<html><head><title>Print Laporan</title>' +
+            '<style>' +
+            '@page {{ size: landscape; margin: 5mm; }}' +
+            'html, body {{ margin:0; padding:0; height:100%; }}' +
+            '.print-page {{ width:287mm; height:200mm; display:flex; align-items:center; justify-content:center; }}' +
+            '.print-page img {{ max-width:100%; max-height:100%; object-fit:contain; }}' +
+            '</style>' +
+            '</head>' +
+            '<body>' +
+            '<div class="print-page"><img src="' + reportImgSrc + '" onload="window.print()"></div>' +
+            '</body></html>';
+        const printBlob = new Blob([printHtml], {{type: 'text/html'}});
+        document.getElementById('print-link').href = URL.createObjectURL(printBlob);
+        </script>
+        """,
+        height="content",
+    )
+
+
 # ── Sidebar ──────────────────────────────────────────────────────────────
 with st.sidebar:
     st.header("Mimir")
@@ -264,10 +369,10 @@ st.caption(
     f"Ketik `{CATAT_PREFIX} ...` untuk mencatat keputusan/koreksi/proses baru."
 )
 
-for msg in st.session_state.messages:
+for msg_idx, msg in enumerate(st.session_state.messages):
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
-        for out in msg.get("tool_outputs") or []:
+        for out_idx, out in enumerate(msg.get("tool_outputs") or []):
             with st.expander(f"🔧 {out['title']}", expanded=True):
                 if out.get("html"):
                     st.markdown(out["html"], unsafe_allow_html=True)
@@ -275,6 +380,12 @@ for msg in st.session_state.messages:
                     st.dataframe(out["table"])
                 else:
                     st.caption(out["model_text"])
+                if out.get("png_bytes"):
+                    render_copy_print_widget(out["png_bytes"])
+                    st.download_button(
+                        "Download Gambar", out["png_bytes"], file_name=out.get("png_name", "laporan.png"),
+                        mime="image/png", key=f"dl-hist-{msg_idx}-{out_idx}",
+                    )
         if msg.get("timing"):
             st.caption(bench.format_caption(msg["timing"]))
         if msg.get("sources"):
@@ -404,7 +515,7 @@ if question := st.chat_input("Tanya sesuatu, atau `catat: ...` untuk mencatat me
                 st.stop()
             t_end = time.perf_counter()
 
-            for out in tool_outputs:
+            for out_idx, out in enumerate(tool_outputs):
                 with st.expander(f"🔧 {out['title']}", expanded=True):
                     if out.get("html"):
                         st.markdown(out["html"], unsafe_allow_html=True)
@@ -412,6 +523,12 @@ if question := st.chat_input("Tanya sesuatu, atau `catat: ...` untuk mencatat me
                         st.dataframe(out["table"])
                     else:
                         st.caption(out["model_text"])
+                    if out.get("png_bytes"):
+                        render_copy_print_widget(out["png_bytes"])
+                        st.download_button(
+                            "Download Gambar", out["png_bytes"], file_name=out.get("png_name", "laporan.png"),
+                            mime="image/png", key=f"dl-live-{out_idx}",
+                        )
 
             timing = bench.log(
                 "chat", model,

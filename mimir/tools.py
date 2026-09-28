@@ -9,10 +9,14 @@ deliberately. Heimdall gates SKU-claim / dashboard data behind Admin login;
 Mimir has no login, so exposing those here would silently bypass that gate.
 Widening this list means deciding the access-control question first.
 
-Each tool returns {"model_text": str, "table": DataFrame | None, "title": str}:
-model_text is what the LLM sees; table is rendered directly in the UI so the
-user sees the raw returned figures next to the model's narration and can
-check one against the other.
+Each tool returns at least {"model_text": str, "table": DataFrame | None,
+"title": str}. cari_outlet additionally returns "html" (Heimdall's own
+report table markup) and "png_bytes"/"png_name" (Heimdall's own report
+image, for the copy/print/download widget) -- both None if rendering
+failed, since that's a display enhancement, not required for the tool
+call itself. model_text is what the LLM sees; everything else is rendered
+directly in the UI so the user sees the raw returned figures/report next
+to the model's narration and can check one against the other.
 """
 
 import sys
@@ -42,24 +46,38 @@ def _render_outlet_image():
     return render_outlet_image
 
 
-def _render_outlet_html(site: str, tipe: str) -> str | None:
+def _render_outlet_visuals(site: str, tipe: str) -> dict:
     """Same rendering Heimdall's own Omset Seeker page uses (build_report_rows
-    + build_html_table, core/render_outlet_image.py) -- reused as-is here so
-    Mimir shows the real report layout instead of an LLM's prose narration of
-    the numbers. Returns None on any failure (site genuinely not found is
-    already handled by the caller via seek_outlet; this is purely a display
-    enhancement, so a render failure must not break the tool call itself)."""
+    + build_html_table + render_outlet_report, core/render_outlet_image.py) --
+    reused as-is (not reimplemented) so Mimir shows the real report layout and
+    a real downloadable/printable PNG, not an LLM's prose narration of the
+    numbers. build_report_rows() is computed ONCE and reused for both outputs
+    (same `precomputed` pattern omset_search_app.py itself uses, so a lookup
+    here doesn't query OMSHAR data three times over).
+
+    Returns {} on any failure -- site genuinely not found is already handled
+    by the caller via seek_outlet; this is purely a display enhancement, so a
+    render failure (e.g. matplotlib blocked by Smart App Control, see
+    render_outlet_report's own error message) must not break the tool call."""
     try:
         roi = _render_outlet_image()
         seeker = _omset_seeker()
-        row_cells, _, _ = roi.build_report_rows(site, tipe)
+        row_cells, info, cutoff = roi.build_report_rows(site, tipe)
         brand_cutoffs = {
             row[2]: seeker.get_cutoff_date(brand=row[2], omshar_type=tipe)
             for row in row_cells
         }
-        return roi.build_html_table(row_cells, cutoffs=brand_cutoffs)
+        html = roi.build_html_table(row_cells, cutoffs=brand_cutoffs)
+
+        png_bytes = None
+        try:
+            _, png_bytes = roi.render_outlet_report(precomputed=(row_cells, info, cutoff))
+        except Exception:
+            pass  # PNG is a bonus on top of the HTML table, not required for it
+
+        return {"html": html, "png_bytes": png_bytes, "info": info}
     except Exception:
-        return None
+        return {}
 
 
 @lru_cache(maxsize=2)
@@ -110,7 +128,9 @@ def cari_outlet(site: str, tipe: str = "UMUM", bulan_terakhir: int = 6) -> dict:
         f"- {brand}: " + "; ".join(f"{m}={view.loc[brand, m]}" for m in cols)
         for brand in view.index
     )
-    html = _render_outlet_html(site, tipe)
+    visuals = _render_outlet_visuals(site, tipe)
+    html = visuals.get("html")
+    png_bytes = visuals.get("png_bytes")
     shown_note = (
         "Tabel laporan lengkap SUDAH ditampilkan ke user di bawah jawaban Anda -- "
         "jangan mengetik ulang seluruh rincian per bulan, cukup ringkas 1-2 kalimat "
@@ -129,6 +149,8 @@ def cari_outlet(site: str, tipe: str = "UMUM", bulan_terakhir: int = 6) -> dict:
         "model_text": model_text,
         "table": view,
         "html": html,
+        "png_bytes": png_bytes,
+        "png_name": f"{info.get('Site', site)} {info.get('Outlet', '')}.png",
         "title": f"cari_outlet(site={site}, tipe={tipe}) -- {info.get('Outlet', '')}",
     }
 
