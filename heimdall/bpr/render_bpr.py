@@ -400,15 +400,32 @@ def _text_width_in(text: str, fontsize: float = FONT_CELL) -> float:
 def _col_width_in(df: pd.DataFrame, col: str, header_text: str) -> float:
     """Lebar kolom = selebar konten/header TERPANJANG yang benar-benar akan
     dicetak (bukan bobot tebakan) -- dijamin tidak pernah kepotong/tabrakan
-    apa pun isi datanya (nama wilayah/depo beda-beda panjang antar baris)."""
+    apa pun isi datanya (nama wilayah/depo beda-beda panjang antar baris).
+
+    [FIX] Kolom seperti DOI kadang campur angka dan None (baris region
+    TOTAL di compute_rekap_depo()/compute_rekap_wilayah() SENGAJA tidak
+    punya DOI) -- itu bikin dtype KOLOM-nya jadi 'object', bukan float64
+    murni, walau isinya tetap angka. is_numeric_dtype() jadi False untuk
+    kolom begitu, jadi cabang lama salah ambil str(v) MENTAH (mis.
+    "237.33333333333334", presisi penuh) alih-alih _fmt_cell() yang
+    dipakai untuk render cell-nya sendiri ("237") -- lebar kolom dihitung
+    dari teks yang TIDAK PERNAH benar-benar dicetak, jadi jauh lebih lebar
+    dari kebutuhan (DOI: ~1.18" padahal cukup ~0.26"), sementara ANGKA di
+    dalam selnya sendiri tetap benar (makanya kelihatan "kolomnya lebar
+    banget" tapi angkanya normal). Dicek per NILAI (bukan dtype kolom)
+    supaya konsisten persis dengan _fmt_cell() yang dipakai render cell."""
     header_w = _text_width_in(header_text)
-    if col in df.columns:
-        if pd.api.types.is_numeric_dtype(df[col]):
-            data_w = max((_text_width_in(_fmt_cell(col, v)) for v in df[col]), default=0)
-        else:
-            data_w = max((_text_width_in(str(v)) for v in df[col].dropna()), default=0)
-    else:
-        data_w = 0
+    if col not in df.columns:
+        return header_w
+
+    def _display_text(v):
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return _fmt_cell(col, v)
+        if isinstance(v, (int, float)):
+            return _fmt_cell(col, v)
+        return str(v)
+
+    data_w = max((_text_width_in(_display_text(v)) for v in df[col]), default=0)
     return max(header_w, data_w)
 
 
