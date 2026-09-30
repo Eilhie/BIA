@@ -223,6 +223,25 @@ def load_brand(brand: str, omshar_type: str = "UMUM") -> pd.DataFrame:
 
     df = pd.concat([_read_query_csv(p) for p in sources], ignore_index=True)
 
+    # [FIX] Sebagian site di raw OMSHAR muncul >1 baris dengan NILAI BULAN identik
+    # persis (24 kolom bulan sama semua) -- dikonfirmasi NYATA: dari 71.781 site UMUM,
+    # 56 site dobel. Sebelum fix ini, query_brand()/get_brand_months() menjumlahkan
+    # SEMUA baris yang cocok per site -- niatnya menangani site yang PUNYA >1 baris
+    # dengan nilai BEDA (mis. pindah akun distributor pertengahan tahun, dua baris
+    # parsial yang memang harus dijumlah), tapi untuk duplikat begini artinya nilainya
+    # DIGANDAKAN diam-diam -- ditemukan lewat laporan user: total grup gabungan
+    # "TK SELIN GABUNGAN" beda dari rekap manual, ternyata karena beberapa anggotanya
+    # (TK ABADI, TK SENTOSA, TK ROSE, PD SELIN) punya baris kembar.
+    #
+    # PENTING -- subset HANYA Site + kolom bulan, BUKAN drop_duplicates() tanpa subset
+    # (seluruh kolom): dicoba dulu versi seluruh-kolom, GAGAL menangkap kembarannya --
+    # baris kembarnya ternyata identik di SEMUA 24 bulan tapi kolom "Alamat" beda
+    # format tipis ("...CIPAYUNG" vs "...- CIPAYUNG...", noise text, bukan data
+    # bisnis). Subset ke Site+bulan saja supaya noise di kolom teks (Alamat/
+    # Kecamatan/dst) tidak menghalangi dedup, sementara baris yang BENAR-BENAR beda
+    # nilai bulan (kalau pernah ada) tetap dijumlah seperti semula.
+    df = df.drop_duplicates(subset=["Site"] + MONTH_LABELS, ignore_index=True)
+
     try:
         pq_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = pq_path.with_name(f".{pq_path.stem}.{os.getpid()}.tmp.parquet")
@@ -333,9 +352,21 @@ def _gabungan_from_flat_sheet(ws) -> dict:
     for name, g in groups.items():
         if len(g["sites"]) < 2:
             continue
-        # kode gabungan sintetis = site toko pertama (urutan file) + "1" -- diverifikasi
+        # Kode gabungan sintetis = site toko pertama (urutan file) + digit -- diverifikasi
         # cocok persis dengan kode di sheet block lama (mis. A11) untuk grup yang sama.
-        gab_site = f"{g['sites'][0]}1"
+        # [FIX] Naikkan digit kalau sudah dipakai grup LAIN di file yang sama (mis. sheet
+        # gabungan besar + sheet pecahannya per wilayah, sama-sama mulai dari toko yang
+        # sama) -- sama seperti proteksi yang sudah ada di
+        # _gabungan_from_horeka_workbook(), supaya grup kedua tidak diam-diam menimpa
+        # grup pertama di dict (kunci sama). Ini TIDAK melindungi dari tabrakan dengan
+        # kode outlet individual ASLI di data OMSHAR -- itu ditangani terpisah di
+        # _drop_gabungan_collisions() (load_gabungan_map()), karena butuh data brand
+        # OMSHAR yang tidak tersedia di sini (parser ini cuma baca 1 file Excel).
+        suffix = 1
+        gab_site = f"{g['sites'][0]}{suffix}"
+        while gab_site in gabungan_map:
+            suffix += 1
+            gab_site = f"{g['sites'][0]}{suffix}"
         gabungan_map[gab_site] = {"name": name, "wilayah": g["wilayah"], "children": g["sites"]}
     return gabungan_map
 
@@ -485,26 +516,80 @@ def load_horeka_gabungan_map() -> dict:
     return _gabungan_from_horeka_workbook(wb)
 
 
+# Diisi ulang tiap kali load_gabungan_map() BENERAN jalan (bukan cache hit) --
+# dipakai halaman Atur Gabungan UMUM/HOREKA buat tampilkan peringatan yang
+# terlihat ke admin (lihat get_gabungan_collisions()), bukan cuma print() ke
+# console server yang tidak akan pernah dilihat siapa pun.
+_LAST_GABUNGAN_COLLISIONS: dict[str, list[str]] = {}
+
+
+def get_gabungan_collisions(omshar_type: str = "UMUM") -> list[str]:
+    """Kode gabungan (dari load_gabungan_map terakhir) yang dibuang karena
+    tabrakan dengan kode outlet individual asli -- lihat docstring
+    _drop_gabungan_collisions(). Kosong kalau load_gabungan_map(omshar_type)
+    belum pernah dipanggil sejak start/cache_clear() terakhir."""
+    return _LAST_GABUNGAN_COLLISIONS.get(omshar_type, [])
+
+
+def _drop_gabungan_collisions(raw_map: dict, omshar_type: str) -> dict:
+    """Buang key gabungan yang TERNYATA sama persis dengan kode outlet
+    individual ASLI di data OMSHAR -- dikonfirmasi NYATA terjadi (bukan
+    tebakan): di file sumber UMUM per 3 Sep 2026, baris ringkasan grup
+    "WIJAYA GABUNGAN" memakai kode outlet anggotanya sendiri, "2224-23023379",
+    apa adanya -- bukan kode sintetis unik seperti kebanyakan grup lain
+    (yang biasanya toko pertama + '1'). Kode gabungan di jalur block-sheet
+    MURNI dibaca dari file sumber (bukan kita yang generate, lihat
+    _gabungan_from_block_sheet()), jadi kita tidak bisa cegah tabrakan itu
+    terjadi di sumbernya -- yang bisa kita lakukan cuma DETEKSI lalu
+    prioritaskan outlet individual asli (konsisten dengan fix
+    sync_current_month_from_omshar() di mclub_pipeline.py, kasus yang sama
+    persis). Tanpa ini, outlet individual itu SELAMANYA tidak bisa dicari
+    angkanya sendiri -- yang muncul selalu total gabungan, diam-diam, di
+    SEMUA halaman yang query by site code (Omset Seeker, Cek Klaim SKU,
+    Detail SKU Brand Besar, render PNG, sync MClub)."""
+    global _LAST_GABUNGAN_COLLISIONS
+    if not raw_map:
+        _LAST_GABUNGAN_COLLISIONS[omshar_type] = []
+        return raw_map
+
+    real_sites = set(load_brand("BIR", omshar_type)["Site"].astype(str))
+    collisions = sorted(s for s in raw_map if s in real_sites)
+    _LAST_GABUNGAN_COLLISIONS[omshar_type] = collisions
+    if not collisions:
+        return raw_map
+
+    print(
+        f"[WARN] load_gabungan_map({omshar_type}): {len(collisions)} kode gabungan "
+        f"tabrakan dengan outlet asli, dikeluarkan dari daftar gabungan: {collisions}"
+    )
+    return {s: g for s, g in raw_map.items() if s not in collisions}
+
+
 @lru_cache(maxsize=None)
 def load_gabungan_map(omshar_type: str = "UMUM") -> dict:
     """Parse grup gabungan jadi {kode_site_gabungan: {name, wilayah, children: [site,...]}}.
-    Kode gabungan sintetis (toko pertama + '1') tidak pernah muncul di data OMSHAR mentah.
+    Kode gabungan BIASANYA sintetis (toko pertama + '1') dan tidak pernah muncul di data
+    OMSHAR mentah -- TAPI tidak selalu: lihat _drop_gabungan_collisions() untuk kasus nyata
+    yang ditemukan dan cara kode ini menanganinya (kode yang tabrakan dibuang, bukan
+    diam-diam salah menjumlahkan outlet individual sebagai gabungan).
 
     UMUM: file Toko Gabungan Excel bulanan dari divisi lain -- format file berubah antar
     bulan, pakai sheet 'Sheet1' (flat, baru) kalau ada, fallback ke format block lama
     (sheet pertama, mis. 'A11') kalau tidak.
     HOREKA: file Gabungan HOREKA terpisah, satu sheet per grup -- lihat load_horeka_gabungan_map()."""
     if omshar_type == "HOREKA":
-        return load_horeka_gabungan_map()
+        raw_map = load_horeka_gabungan_map()
+    else:
+        path = find_latest_toko_gabungan()
+        if path is None:
+            return {}
+        wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+        if "Sheet1" in wb.sheetnames:
+            raw_map = _gabungan_from_flat_sheet(wb["Sheet1"])
+        else:
+            raw_map = _gabungan_from_block_sheet(wb.worksheets[0])
 
-    path = find_latest_toko_gabungan()
-    if path is None:
-        return {}
-
-    wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
-    if "Sheet1" in wb.sheetnames:
-        return _gabungan_from_flat_sheet(wb["Sheet1"])
-    return _gabungan_from_block_sheet(wb.worksheets[0])
+    return _drop_gabungan_collisions(raw_map, omshar_type)
 
 
 def seek_outlet(site: str, omshar_type: str = "UMUM", brands: list[str] | None = None):

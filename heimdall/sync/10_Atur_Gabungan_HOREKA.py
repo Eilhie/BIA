@@ -47,6 +47,16 @@ else:
     g1.metric("File aktif", gab_path.name)
     g2.metric("Jumlah grup gabungan", len(gab_map))
 
+    collisions = os_.get_gabungan_collisions("HOREKA")
+    if collisions:
+        st.warning(
+            f"**{len(collisions)} kode gabungan dikeluarkan** dari daftar di atas karena "
+            f"sama persis dengan kode outlet individual asli di data OMSHAR: `{', '.join(collisions)}`. "
+            "Outlet individualnya tetap bisa dicari normal di Omset Seeker; grup gabungan "
+            "yang memakai kode itu jadi tidak bisa diakses lewat kode ini sampai kode "
+            "gabungannya diganti di file sumber."
+        )
+
     st.divider()
 
     if not gab_map:
