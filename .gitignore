@@ -21,6 +21,7 @@ output/
 # Logs and runtime state
 *.log
 sync_log.txt
+scheduled_sync_log.txt
 scheduled_tasks.lock
 SKU_Terlewat.txt
 **/SKU_Terlewat.txt

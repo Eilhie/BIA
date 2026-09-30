@@ -34,3 +34,4 @@ pages:
   "cukai/12_Cukai_Kompetitor.py": 5   # estimasi volume kompetitor dari data cukai
   "daily_report/16_Setup_Daily_Report.py": 5  # salin file root Daily Report ke folder tanggal hari ini
   "bpr/13_BPR.py": 4                 # rekap NORM/STOK/DOI/Order harian per Depo & Wilayah
+  "omshar90/17_Omset_P90.py": 5      # rekap omset P90 per Key Account/Outlet -- WIP

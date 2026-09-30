@@ -54,3 +54,16 @@ MCLUB_DIR = _env_path("SDA_MCLUB_DIR", r"D:\OUTLET MCLUB PLATINUM GOLD")
 
 # File Excel Toko Gabungan (UMUM & HOREKA) dari divisi lain -- read-only.
 TOKO_GABUNGAN_DIR = _env_path("SDA_TOKO_GABUNGAN_DIR", r"D:\Data BIA\INFO BIA\Toko Gabungan")
+
+# Google Drive -- arsip .7z "OMSHAR 90" (DIV AB1 / FABS & PROST / BEV B&C),
+# nasional (bukan per-wilayah seperti OMSHAR biasa). Trigger waktunya TIDAK
+# tentu (beda dari BPR yang ~07:00) -- lihat omshar90_pipeline.py.
+GDRIVE_OMSHAR90_DIR = _env_path(
+    "SDA_GDRIVE_OMSHAR90_DIR", r"G:\My Drive\Omshar Div AB1, FABS, PROST dan Bev B&C"
+)
+
+# Folder kerja lokal OMSHAR90 -- konvensi "Closing <Mon> <Year>\" per bulan
+# SUDAH ada & dipakai manual di sini sebelum pipeline ini dibuat (dikonfirmasi
+# langsung dari isi foldernya, bukan bikin konvensi baru) -- lihat
+# omshar90_pipeline.backup_monthly().
+OMSHAR90_BACKUP_DIR = _env_path("SDA_OMSHAR90_BACKUP_DIR", r"D:\DB OMSHAR\DB P90")
