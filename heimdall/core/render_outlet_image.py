@@ -148,6 +148,14 @@ def build_html_table(row_cells: list, cutoffs: dict[str, str] | None = None) -> 
     tempat sempit kayak modal (lihat pages/5_Outlet_Lapisan_MClub.py)."""
     show_cutoff = cutoffs is not None
     STICKY = "position:sticky;left:0;z-index:2;box-shadow:2px 0 3px -1px rgba(0,0,0,0.3);"
+    # [FIX] Kolom BRAND (sticky) TIDAK punya lebar tetap sebelumnya -- browser
+    # menghitung lebarnya per baris dari isi teksnya sendiri. Brand KEG/PET
+    # (mis. "PROST RAJAWALI PET 20L", 22 karakter) jauh lebih panjang dari brand
+    # lama yang paling panjang ("KONIG WEISSBIER", 15 karakter) -- kombinasi
+    # sticky + lebar tidak tetap itu yang bikin baris KEG/PET kelihatan geser/
+    # tidak sejajar dengan baris lain. min-width + width dipaksa sama di SEMUA
+    # baris (header & body) supaya kolomnya konsisten apa pun panjang isinya.
+    BRAND_COL_WIDTH = "min-width:210px;width:210px;"
     th = lambda text, bg, fg="black", extra="": (
         f'<th style="background:{bg};color:{fg};padding:4px 8px;white-space:nowrap;'
         f'border:1px solid #999;{extra}">{text}</th>'
@@ -155,7 +163,7 @@ def build_html_table(row_cells: list, cutoffs: dict[str, str] | None = None) -> 
     header = "<tr>"
     header += "".join(th(c, C_HEADER_25) for c in LABELS_25)
     header += th("RT2 25", C_HEADER_RT2_25, "white")
-    header += th("BRAND", C_HEADER_BRAND, extra=STICKY)
+    header += th("BRAND", C_HEADER_BRAND, extra=STICKY + BRAND_COL_WIDTH)
     if show_cutoff:
         header += th("CUT OFF", C_HEADER_BRAND)
     header += "".join(th(c, C_HEADER_26) for c in LABELS_26)
@@ -173,7 +181,7 @@ def build_html_table(row_cells: list, cutoffs: dict[str, str] | None = None) -> 
         row = "<tr>"
         row += "".join(td(v, bg) for v in vals_25)
         row += td(rt2_25, bg if row_type != "normal" else C_CELL_RT2_25, bold=True)
-        row += td(label, bg if row_type != "normal" else C_CELL_BRAND, align="left", bold=True, extra=STICKY)
+        row += td(label, bg if row_type != "normal" else C_CELL_BRAND, align="left", bold=True, extra=STICKY + BRAND_COL_WIDTH)
         if show_cutoff:
             row += td(cutoffs.get(label, "") or "-", bg, align="center")
         row += "".join(td(v, bg) for v in vals_26)
